@@ -1,4 +1,4 @@
-// Exercise 2: get the common element between two halves of a string.
+// Exercise 3: get the common element between two halves of a string.
 
 // For reading/parsing
 use std::fs::File;
