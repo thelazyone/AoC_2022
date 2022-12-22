@@ -47,7 +47,7 @@ fn get_score(input: RockPaperScissors, output: RockPaperScissors) -> i32{
 }
 
 fn main() -> io::Result<()> {
-    println!("Welcome to Advent of Code 2022 - Day 1!");
+    println!("Welcome to Advent of Code 2022 - Day 2!");
 
     // Handling the reading/parsing
     let file = File::open("./data/input.txt")?;
