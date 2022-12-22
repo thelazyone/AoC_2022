@@ -6,7 +6,7 @@ use std::io::{self, prelude::*, BufReader};
 use regex::Regex;
 
 
-// Parsing the syntax: move X from Y to Z
+// Parsing the syntax: "move X from Y to Z"
 fn parse_instruction (input : &str) -> Option<(u32, u32, u32)> {
     let regex_string = 
         r"move (?P<val1>\d+) from (?P<val2>\d+) to (?P<val3>\d+)";
@@ -29,13 +29,12 @@ fn parse_instruction (input : &str) -> Option<(u32, u32, u32)> {
 // Applying the movement (for Part 1)
 fn apply_single_movement (from : usize, to: usize, layout: &mut Vec<Vec<char>>) {
 
+    // Get the last element of column
     // This is the way I wanted to do it, but the borrowing rules are blocking me. Oh well.
     // if let Some(val) = layout[from].last() { 
     //     layout[from].pop();
     //     layout[to].push(*val)
     // }
-
-    // Get the last element of column
     let val = layout[from].last().unwrap().clone();
     layout[from].pop();
     layout[to].push(val)
@@ -90,12 +89,12 @@ fn main() -> io::Result<()> {
         if let Ok(line) = curr_line {
             match section_num {
                 0 => {
-                // The empty line marks the start of the second part of the parsing.
-                if line.is_empty() {
-                    section_num = 1;
-                    continue;
-                }
-                layout_lines_vec.push(line.to_owned());
+                    // The empty line marks the start of the second part of the parsing.
+                    if line.is_empty() {
+                        section_num = 1;
+                        continue;
+                    }
+                    layout_lines_vec.push(line.to_owned());
                 },
 
                 1 => {
@@ -117,6 +116,7 @@ fn main() -> io::Result<()> {
     crates_layout.resize(stacks_number, Vec::<char>::new());
     while let Some(item) = layout_iter.next() {
         for stack_idx in 0..stacks_number {
+            
             // Extracting the character if it exists:
             let selected_character = item.chars().nth((1 + 4 * (stack_idx as u32)).try_into().unwrap()).unwrap();
             if selected_character != ' ' {
@@ -130,7 +130,6 @@ fn main() -> io::Result<()> {
 
     // Iterating over the instructions:
     for element in &crates_instructions {
-        //println!("Applying movements: {} from {} to {}", element.0, element.1, element.2);
         apply_movements(
             element.0, //amount
             TryInto::<usize>::try_into(element.1 - 1).unwrap(), // from 
