@@ -4,13 +4,16 @@
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
+// For handles
+use std::rc::Rc;
 
+// Folder structure!
 struct Folder {
     name : String,
     local_size : u32,
     subfolders : Vec::<Folder>,
     files : Vec::<(String, u32)>,
-    parent: Option<Box<Folder>>,
+    parent: Option<Rc<Folder>>,
 }
 impl Folder {
 
@@ -37,6 +40,38 @@ impl Folder {
     }
 }
 
+
+// Parsing the command line: returning an enum 
+#[derive(Debug)]
+enum LineCommands {
+    GoToRoot,
+    GoToParent,
+    GoToFolder(String),
+    AddFolder(String),
+    AddFile((String, u32)),
+    Ignore,
+}
+fn get_line_command(input_line : String) -> LineCommands {
+
+    // matching the start of the string:
+    match input_line.as_str() {
+        "$ cd /" => return LineCommands::GoToRoot,
+        "$ cd .." => return LineCommands::GoToParent,
+        line if line.contains("$ cd ") => {
+            return LineCommands::GoToFolder(input_line.strip_prefix("$ cd ").unwrap().to_string())
+        },
+        line if line.contains("dir ") => {
+            return LineCommands::AddFolder(input_line.strip_prefix("dir ").unwrap().to_string())
+        },
+        line if line.split(' ').next().is_some() && line.split(' ').next().unwrap().parse::<i32>().is_ok() => {
+            return LineCommands::AddFile((line.split(' ').nth(1).unwrap().to_string(), line.split(' ').nth(0).unwrap().parse::<u32>().unwrap()))
+        },
+        "$ ls" => return LineCommands::Ignore,
+        _ => panic!("Command not recognized: '{}'", input_line),
+    }
+}
+
+
 // Main Function
 fn main() -> io::Result<()> {
     println!("Welcome to Advent of Code 2022 - Day 7!");
@@ -61,7 +96,10 @@ fn main() -> io::Result<()> {
     let mut root_folder = Folder::new("Root".to_string());
 
     // Now we need a way to handle the "cursor" of the commands, assuming that the user moved around a lot.
-
+    let mut current_cursor = Rc::<Folder>::new(root_folder);
+    for command in commands_vec{
+        println!("command is {:?}", get_line_command(command));
+    }
 
     // End of main
     Ok(())
