@@ -65,7 +65,7 @@ fn apply_movements_together (amount: u32, from : usize, to: usize, layout: &mut 
 
 // Main Function
 fn main() -> io::Result<()> {
-    println!("Welcome to Advent of Code 2022 - Day 4!");
+    println!("Welcome to Advent of Code 2022 - Day 5!");
 
     // Handling the reading/parsing
     let file = File::open("./data/input.txt")?;
