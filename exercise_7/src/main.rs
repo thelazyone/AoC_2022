@@ -6,35 +6,36 @@ use std::io::{self, prelude::*, BufReader};
 
 // For handles
 use std::rc::Rc;
+use std::cell::RefCell;
+
+// Maps are useful
+use std::collections::HashMap;
 
 // Folder structure!
+#[derive(Debug)]
 struct Folder {
-    name : String,
-    local_size : u32,
-    subfolders : Vec::<Folder>,
-    files : Vec::<(String, u32)>,
-    parent: Option<Rc<Folder>>,
+    subfolders : HashMap::<String, Rc<RefCell<Folder>>>,
+    files : HashMap::<String, u32>,
+    parent: Option<Rc<RefCell<Folder>>>,
 }
 impl Folder {
 
-    fn new(input_name : String) -> Folder {
+    fn new() -> Folder {
         Folder {
-            name: input_name,
-            local_size: 0,
-            subfolders: Vec::<Folder>::new(),
-            files: Vec::<(String, u32)>::new(),
+            subfolders:  HashMap::<String, Rc<RefCell<Folder>>>::new(),
+            files: HashMap::<String, u32>::new(),
             parent: None,
         }
     }
 
     fn get_size (&self) -> u32 {
-        let mut total_size = self.local_size;
+        let mut total_size = 0;
         for file in &self.files {
             total_size += file.1;
         }
         
-        for subfolder in &self.subfolders {
-            total_size += subfolder.get_size();
+        for (_, subfolder) in &self.subfolders {
+            total_size += subfolder.borrow_mut().get_size();
         }
         total_size
     }
@@ -93,13 +94,78 @@ fn main() -> io::Result<()> {
     // For Part 1 - creating the folders representation 
 
     // Root folder
-    let mut root_folder = Folder::new("Root".to_string());
+    let root_folder = Folder::new();
+    let root_folder_cursor = Rc::<RefCell<Folder>>::new(RefCell::<Folder>::new(root_folder));
+    let mut current_cursor = root_folder_cursor.clone();
 
+    // Vector of all folders whatsoever.
+    let mut folders_vector = Vec::<Rc<RefCell<Folder>>>::new();
+    folders_vector.push(root_folder_cursor.clone());
+    
     // Now we need a way to handle the "cursor" of the commands, assuming that the user moved around a lot.
-    let mut current_cursor = Rc::<Folder>::new(root_folder);
     for command in commands_vec{
-        println!("command is {:?}", get_line_command(command));
+        let enum_command = get_line_command(command);
+        match enum_command {
+            LineCommands::GoToRoot => {
+                current_cursor = root_folder_cursor.clone();
+            },
+            LineCommands::GoToParent => {
+                let curr_parent = current_cursor.borrow_mut().parent.clone();
+                current_cursor = curr_parent.unwrap().clone();
+            },
+            LineCommands::GoToFolder(folder_name) => {
+                let support_cursor = current_cursor.borrow().subfolders.get(&folder_name).expect("No subfolder found.").clone();
+                current_cursor = support_cursor;
+            },
+            LineCommands::AddFolder(folder_name) => {
+                // First check if it exists already:
+                if !current_cursor.borrow().subfolders.contains_key(&folder_name)
+                {
+                    let mut support_new_folder = Folder::new();
+                    support_new_folder.parent = Some(current_cursor.clone());
+                    let new_refcell = Rc::<RefCell<Folder>>::new(RefCell::<Folder>::new(support_new_folder));
+                    current_cursor.borrow_mut().subfolders.insert(folder_name.clone(), new_refcell.clone());
+                    
+                    // Pushing in the vector, to retrieve later:
+                    folders_vector.push(new_refcell);
+                }
+            },
+            LineCommands::AddFile((file_name, file_size)) => {
+                current_cursor.borrow_mut().files.insert(file_name.clone(), file_size.clone());
+            },
+            LineCommands::Ignore => {},
+        }
     }
+
+    // For Part 1 i must add up the sum of sizes of all folders lesser or equal to 100.000
+    println!("Total size of root is: {}. folders vector size is {}", 
+        root_folder_cursor.borrow().get_size(),
+        folders_vector.len());
+    let mut total_small_folders_sum = 0;
+    for folder in &folders_vector {
+        let folder_size = folder.borrow().get_size();
+        if folder_size <= 100000 {
+            total_small_folders_sum += folder_size;
+        }
+    }
+    println!("The result of Part 1 is {}.", total_small_folders_sum);
+
+    // For part 2 I must find the smallest folder greater or equal to 8381165.
+    // I'm gonna go with a blunt approach.
+    let total_space = folders_vector[0].borrow().get_size();
+    let free_space = 70000000 - total_space;
+    let required_space_to_free = 30000000 - free_space;
+    let mut chosen_folder_size = total_space;
+    println!("Required free space is {}", required_space_to_free);
+
+    for folder in &folders_vector {
+        let folder_size = folder.borrow().get_size();
+        if folder_size >= required_space_to_free && folder_size < chosen_folder_size
+        {
+            chosen_folder_size = folder_size;
+        }
+    }
+    println!("The result of Part 2 is {}.", chosen_folder_size);
 
     // End of main
     Ok(())
