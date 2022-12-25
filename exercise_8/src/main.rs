@@ -203,4 +203,9 @@ mod tests {
     fn global_test_part_1() {
         assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 21);
     }    
+
+    #[test]
+    fn global_test_part_2() {
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+    }    
 }
