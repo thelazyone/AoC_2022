@@ -1,4 +1,4 @@
-// Exercise 7: creating a filesystem representation and finding the large directories
+// Exercise 8: Line-of-sight calculations in a dense matrix
 
 // For reading/parsing
 use std::fs::File;
