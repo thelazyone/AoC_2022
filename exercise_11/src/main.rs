@@ -1,4 +1,4 @@
-// Exercise 9: calculating the path of a cursor following the movement of another
+// Exercise 11: calculating the path of a cursor following the movement of another
 // Implementing only part 2, because the optimization made part 1 unfeasible : the "/3"
 // operation doesn't work well with the implemented structure.
 
@@ -187,7 +187,7 @@ fn execute (input_path : String)  -> Option<(u64, u64)> {
     }
 
     // Part 1 is not working anymore, since the optimization for part 2 doesn't work with divisions.
-    
+
     // // Each monkey then operates, 20 times:
     // for _ in 0..20 {
 
