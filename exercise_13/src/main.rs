@@ -7,6 +7,8 @@ use std::io::{self, prelude::*, BufReader};
 // utility
 use std::cmp;
 
+
+// The vector is either made of numbers or more vectors of the same type
 #[derive(Clone)]
 #[derive(Debug)]
 enum OrderedListValue {
@@ -14,6 +16,8 @@ enum OrderedListValue {
     Vector(Vec<OrderedListValue>),
 }
 
+
+// Generates the input string from the structures. Just for debugging purposes.
 fn convert_to_string (input : OrderedListValue ) -> String {
     match input {
         OrderedListValue::Number(value) => return value.to_string(),
@@ -28,12 +32,13 @@ fn convert_to_string (input : OrderedListValue ) -> String {
     };
 }
 
+
+// Parsing a single element of a line. Returns the remaining part of the string, if present.
 fn parse_element (input : String) -> (OrderedListValue, Option<String>) {
     
     // If first element is not bracket, retrieving it (till the next ',') 
     // and returning the rest.
     if !input.starts_with("["){
-        //println!("element is number");
         match input.split_once(",") {
             Some(splits) => return (OrderedListValue::Number(splits.0.parse::<i32>().unwrap()), Some(splits.1.to_string())),
             None => return (OrderedListValue::Number(input.parse::<i32>().unwrap()), None),
@@ -50,8 +55,7 @@ fn parse_element (input : String) -> (OrderedListValue, Option<String>) {
                 _ => continue,
             }
             if counter == 0 {
-                //println!("found closing parenthesis at {}", index);
-                if input.len() > index + 1 {
+                if input.len() > index + 2 {
                     return (parse_list(input[0..index + 1].to_string()), Some(input[index + 2..].to_string()));
                 } 
                 return (parse_list(input[0..index + 1].to_string()), None);
@@ -62,14 +66,14 @@ fn parse_element (input : String) -> (OrderedListValue, Option<String>) {
     panic!("No element found to parse!");
 }
 
+
+// Parsing a whole line.
 fn parse_list (input : String) -> OrderedListValue {
 
     let mut elementsVector = Vec::<OrderedListValue>::new();
 
     // Looking for the two outmost square parenthesis
-    //println!("DEBUG: parse_list input {}", input);
     let mut substrings = Some(input.split_once("[").unwrap().1.rsplit_once("]").unwrap().0.to_string());
-    //println!("DEBUG: parse_list input STR {:?}", substrings);
 
     // Special case: if the substring is empty, returning and empty vector!
     // Note: the .clone().unwrap() implies a copy while i'm just reading it.
@@ -82,55 +86,60 @@ fn parse_list (input : String) -> OrderedListValue {
     while substrings.is_some() { // TODO bad while
         let list_elem : OrderedListValue;
         (list_elem, substrings) = parse_element(substrings.unwrap().to_string());
-        //println!("Adding {:?}, remaining is {:?}", list_elem, substrings);
         elementsVector.push(list_elem);
     }
 
     OrderedListValue::Vector(elementsVector)
 }
 
-fn check_ordered(mut left : OrderedListValue, mut right : OrderedListValue) -> bool {
 
-    println!("Comparing {:?} and {:?}", convert_to_string(left.clone()), convert_to_string(right.clone()));
+// Order checking. Note that it might return true, false or None (the two elements are equal)
+// A return type of cmp::Ordering could have worked as well, but I learned about it mid-way.
+fn check_ordered(mut left : OrderedListValue, mut right : OrderedListValue) -> Option<bool> {
 
     // If both are numbers, just comparing
     if let (OrderedListValue::Number(left_number), OrderedListValue::Number(right_number)) = (&left, &right) {
-        println!("result is {}",left_number <= right_number);
-        return left_number <= right_number;
+        match *left_number as i32 - *right_number as i32 {
+            n if n < 0 => return Some(true),
+            n if n > 0 => return Some(false),
+            0 => return None,
+            _ => panic!("it's mathematically impossible to fall here!"),
+        };
     } 
 
     // If one of the two is number, replacing with vec with one element instead.
     if let OrderedListValue::Number(left_number) = &left {
-        println!("converting {}",left_number);
         left = OrderedListValue::Vector(vec!(OrderedListValue::Number(left_number.clone())));
     }    
     if let OrderedListValue::Number(right_number) = &right {
-        println!("converting {}",right_number);
         right = OrderedListValue::Vector(vec!(OrderedListValue::Number(right_number.clone())));
     }
 
     // Expecting both to be lists now.
     if let (OrderedListValue::Vector(left_vector), OrderedListValue::Vector(right_vector)) = (&left, &right) {
-        println!("it's vector");
-
-        // if left_vector.len() > right_vector.len() {
-        //     println!("result is false (len {} > {})",left_vector.len() ,right_vector.len());
-        //     return false;
-        // }
-
         // If at least one is a list, treating as list.
         // I could have used itertools.zip_shortest() but I wanted to stick with
         // few modules for now.
         for index in 0..cmp::min(left_vector.len(), right_vector.len()) {
-            if !check_ordered(left_vector[index].clone(), right_vector[index].clone()) {
-                println!("result is false (subv)");
-                return false;
+            match check_ordered(left_vector[index].clone(), right_vector[index].clone()) {
+                Some(result) if !result => return Some(false),
+                Some(result) if result => return Some(true),
+                None => continue,
+                _ => panic!("it's mathematically impossible to fall here!"),
             }
         }
-    } 
 
-    println!("result is true");
-    true
+        // If this point is reached it means that all elements have been reached.
+        // If the right list still has elements, the result is true.
+        match left_vector.len() as i32 - right_vector.len() as i32 {
+            n if n < 0 => return Some(true),
+            n if n > 0 => return Some(false),
+            0 => return None,
+            _ => panic!("it's mathematically impossible to fall here!"),
+        }
+    } 
+    // In this case no element is present, so no comparison is done.
+    None
 }
 
 // Primary Function
@@ -157,23 +166,32 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 
     // Parsing the lines to create lists of lists
     let mut good_pairs_counter : u32 = 0;
-    for (index, list_pairs) in lines_vec.chunks(3).enumerate() {
+    for (index, list_pairs) in lines_vec.clone().chunks(3).enumerate() {
         let left_list = parse_list(list_pairs[0].clone());
         let right_list = parse_list(list_pairs[1].clone());
 
-        println!("Original is:\n{}\n{}\nParsed is:\n{}\n{}",
-            list_pairs[0].clone(),
-            list_pairs[1].clone(),
-            convert_to_string(left_list.clone()),
-            convert_to_string(right_list.clone())
-        );
-        
-        if check_ordered(left_list, right_list) {
+        if check_ordered(left_list, right_list).unwrap() {
             good_pairs_counter += index as u32 + 1 /* it's a 1-based index*/;
-            println!("Ordering is correct!");
         }
     }
     result_part_1 = good_pairs_counter;
+
+    // For Part we must then SORT all packets, removing the blank lines, and adding two new packets to the mix.
+    lines_vec.retain(|line| !line.is_empty());
+    lines_vec.push("[[2]]".to_string());
+    lines_vec.push("[[6]]".to_string());
+    lines_vec.sort_by(|el_a, el_b| {
+        match check_ordered(parse_list(el_a.to_string()), parse_list(el_b.to_string())) {
+            Some(true) => std::cmp::Ordering::Less,
+            None => std::cmp::Ordering::Equal,
+            _ => std::cmp::Ordering::Greater,
+        }
+    });
+
+    // Finding [[2]] and [[6]]
+    let index_a = lines_vec.iter().position(|line| line == "[[2]]").unwrap() + 1;
+    let index_b = lines_vec.iter().position(|line| line == "[[6]]").unwrap() + 1;
+    result_part_2 = (index_a * index_b) as u32;
 
     Some((result_part_1, result_part_2))
 }
@@ -204,6 +222,6 @@ mod tests {
 
     #[test]
     fn global_test_part_2() {
-        //assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 140);
     }    
 }
