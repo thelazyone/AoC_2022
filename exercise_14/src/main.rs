@@ -64,6 +64,7 @@ impl SandBox {
     }
 
 
+    // Sets a sand grain but does not perform any gravity simulation.
     fn add_sand_in_coords(&mut self, coords : (usize, usize)) {
         let target_index = self.get_index_from_coords(coords);
         self.data[target_index] = Materials::Sand;
@@ -88,6 +89,10 @@ impl SandBox {
     }
 
     
+    // Drops a grain from a specific position and iterates until
+    // - the grain either reachesa static place (Stuck) OR
+    // - it falls to the bottom (Gone) OR 
+    // - it cannot be spawned at all because the drop position is occupied (Gone)
     fn drop_sand_grain(&mut self, add_position : (usize, usize)) -> (usize, Option<(usize, usize)>) {
 
         // Looping until the grain has stopped moving or has reached the bottom.
@@ -105,8 +110,9 @@ impl SandBox {
     }
 
 
-    fn add_all_sand(&mut self, add_position : (usize, usize)) ->
-        (usize /*steps of the sand*/, usize /*number of grains*/){
+    // Keeps adding sand to the sandbox, until the first grain is Gone instead
+    // of Stuck. At that point it returns the number of sand grains.
+    fn add_all_sand(&mut self, add_position : (usize, usize)) -> usize{
 
         // Looping until found.
         let mut sand_counter = 0;
@@ -116,17 +122,14 @@ impl SandBox {
                     self.add_sand_in_coords(sand_position);
                     sand_counter += 1;
                 },
-                None => {
-                    // That was the last drop!
-                    // Dropping one more to see how many steps it takes.
-                    let (steps, _) = self.drop_sand_grain(add_position);
-                    return (steps, sand_counter);
+                None => return sand_counter;
                 }
             }
         }
     }
 
 
+    // Checking in the sandbox what's below, provides the next positoin for the grain.
     fn get_sand_direction(&self, curr_position: (usize, usize)) -> SandMovement {
 
         let mut new_position : (usize, usize) = curr_position; 
@@ -170,7 +173,7 @@ impl SandBox {
     }
 
 
-    // For testing only. Would be pretty big otherwise.
+    // Generates a string with the sandbox.
     fn draw_map (&self) -> String {
         let mut outString = "".to_string();
         for row_index in 0..self.size.1 {
@@ -249,7 +252,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 
     // Pouring all the sand from 500, 0, as required
     let pouring_point = (500, 0);
-    let(max_steps, grains_number) = cave_map.add_all_sand(pouring_point);
+    let grains_number = cave_map.add_all_sand(pouring_point);
     result_part_1 = grains_number as u32;
     
     // Debug only, for the test sized input or for a good laugh.
@@ -279,7 +282,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     cave_map.add_rock_segment((min_dimensions.0, max_dimensions.1), (max_dimensions.0, max_dimensions.1));
 
     // Filling with sand again.
-    let (max_steps, grains_number) = cave_map.add_all_sand(pouring_point);
+    let grains_number = cave_map.add_all_sand(pouring_point);
     result_part_2 = grains_number as u32;
 
     // Debug only, for the test sized input or for a good laugh.
