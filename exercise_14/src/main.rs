@@ -120,10 +120,8 @@ impl SandBox {
             match self.drop_sand_grain(add_position).1 {
                 Some(sand_position) => {
                     self.add_sand_in_coords(sand_position);
-                    sand_counter += 1;
-                },
-                None => return sand_counter;
-                }
+                    sand_counter += 1;},
+                None => return sand_counter,
             }
         }
     }
@@ -193,7 +191,6 @@ impl SandBox {
         outString
     } 
 }
-
 
 // Primary Function
 fn execute (input_path : String)  -> Option<(u32, u32)> {
