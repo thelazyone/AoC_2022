@@ -32,8 +32,8 @@ fn is_visibile_along (
         let new_position = new_position.unwrap();
 
         // If reached the border the visibility is OK
-        if new_position.0 < 0 || new_position.0 >= i_matrix_size.0 || 
-        new_position.1 < 0 || new_position.1 >= i_matrix_size.1 {
+        if new_position.0 >= i_matrix_size.0 || 
+        new_position.1 >= i_matrix_size.1 {
             return true;
         }
 
@@ -69,8 +69,8 @@ fn get_view_distance  (
         let new_position = new_position.unwrap();
 
         // If reached the border the visibility is OK
-        if new_position.0 < 0 || new_position.0 >= i_matrix_size.0 || 
-        new_position.1 < 0 || new_position.1 >= i_matrix_size.1 {
+        if new_position.0 >= i_matrix_size.0 || 
+        new_position.1 >= i_matrix_size.1 {
             return view_distance;
         }
 
@@ -115,8 +115,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();

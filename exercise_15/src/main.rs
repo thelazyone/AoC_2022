@@ -82,7 +82,6 @@ impl Intervals {
         let mut margins_counter = 0;
         let mut intersected_intervals = Vec::<(i32, i32)>::new();
         let mut temp_interval = (0,0);
-        let mut total_size : u32 = 0;
 
         for element in margins_vect {
 
@@ -99,7 +98,6 @@ impl Intervals {
 
                 // Interval is done!
                 temp_interval.1 = element.0;
-                total_size += (temp_interval.1 - temp_interval.0) as u32;
 
                 // If the end of the last element is the start of the current, extending the last.
                 if !intersected_intervals.is_empty() && intersected_intervals.last().unwrap().1 == temp_interval.0 {
@@ -107,7 +105,6 @@ impl Intervals {
                 }
                 else {
                     intersected_intervals.push(temp_interval.clone());
-                    total_size += 1; // since start and stop are both included // TBR
                 }
             }
         }
@@ -202,8 +199,8 @@ fn execute (input_path : String, test_line : i32, square_side : u32)  -> Option<
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u64 = 0;
-    let mut result_part_2 : u64 = 0;
+    let result_part_1 : u64;
+    let result_part_2 : u64;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();
@@ -244,6 +241,7 @@ fn execute (input_path : String, test_line : i32, square_side : u32)  -> Option<
 
     // For part 2, the search is performed on a 4 millions x 4 millions square area.
     // The optimization done above should work here.
+    let mut found_slots = Vec::<u64>::new();
     for line_idx in 0..square_side as i32 {
         let mut current_interval = make_exclusion_zone(
             &sensors_and_beacons, 
@@ -260,16 +258,19 @@ fn execute (input_path : String, test_line : i32, square_side : u32)  -> Option<
                 full_range.get_intervals().first().unwrap().0 as u64,
                 line_idx as u64,);
 
-            result_part_2 = free_slot.0 * square_side as u64 + free_slot.1;
+                found_slots.push(free_slot.0 * square_side as u64 + free_slot.1);
 
             println!("found a slot in x {} and y {} {}", free_slot.0, free_slot.1, square_side);
-
         }
 
         if line_idx % 1000000 == 0 {
             println!("parsing line {}", line_idx);
         }
     }
+
+    // There should only be ONE point remaining!
+    assert!(found_slots.len() == 1);
+    result_part_2 = found_slots[0];
 
     Some((result_part_1, result_part_2))
 }

@@ -40,7 +40,7 @@ impl SandBox {
     }
 
 
-    fn get_coords_from_index(&self, index : &usize) -> (usize, usize) {
+    fn _get_coords_from_index(&self, index : &usize) -> (usize, usize) {
         (index % self.size.0 + self.start.0, index / self.size.0 + self.start.1)
     }
 
@@ -172,8 +172,8 @@ impl SandBox {
 
 
     // Generates a string with the sandbox.
-    fn draw_map (&self) -> String {
-        let mut outString = "".to_string();
+    fn _draw_map (&self) -> String {
+        let mut out_string = "".to_string();
         for row_index in 0..self.size.1 {
             let mut data_slice = vec![Materials::Air; self.size.0];
             data_slice.copy_from_slice(&self.data[row_index * self.size.0..(row_index + 1) * self.size.0]);
@@ -184,11 +184,11 @@ impl SandBox {
                     &Materials::Sand => 'o',
                 }
             }).collect::<String>().clone(); 
-            outString += &new_string;
-            outString += "\n";
+            out_string += &new_string;
+            out_string += "\n";
         }
 
-        outString
+        out_string
     } 
 }
 
@@ -200,8 +200,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();

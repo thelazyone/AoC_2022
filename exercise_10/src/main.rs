@@ -45,7 +45,7 @@ fn execute (input_path : String)  -> Option<(u32, String)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1;
+    let result_part_1;
     let mut result_part_2;
 
     // First reading the input string - easy.

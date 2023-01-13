@@ -6,7 +6,6 @@ use std::io::{self, prelude::*, BufReader};
 
 //Utility
 use std::cmp;
-use std::num;
 
 // Handling the directions
 enum Directions {
@@ -35,12 +34,6 @@ fn move_head(position: &(i32, i32), direction: &Directions) -> (i32, i32) {
         &Directions::L => return (position.0 - 1, position.1),
         &Directions::R => return (position.0 + 1, position.1),
     }
-}
-
-
-// Since the tail can move diagonally, the max distance between X and Y is the distance.
-fn calculate_distance(positions : &((i32, i32), (i32, i32))) -> i32 {
-    cmp::max((positions.0.0 - positions.1.0).abs(), (positions.0.1 - positions.1.1).abs())
 }
 
 
@@ -90,8 +83,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut commands_vect = Vec::<(Directions, i32)>::new();
@@ -130,7 +123,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     // Removing duplicate positions
     all_tail_positions.sort();
     all_tail_positions.dedup();
-    let result_part_1 = all_tail_positions.len() as u32;
+    result_part_1 = all_tail_positions.len() as u32;
 
     // For Part 2, we now have TEN knots! 
     let mut all_links_positions = vec![(0, 0); 10];
@@ -151,7 +144,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     // Again removing duplicates in the vector.
     all_tail_positions.sort();
     all_tail_positions.dedup();
-    let result_part_2 = all_tail_positions.len() as u32;
+    result_part_2 = all_tail_positions.len() as u32;
 
     Some((result_part_1, result_part_2))
 }

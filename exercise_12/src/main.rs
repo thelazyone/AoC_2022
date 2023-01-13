@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
 // // utility
-use std::cmp;
 use std::collections::HashMap;
 
 // 2D graph-like dense matrix structure
@@ -38,26 +37,26 @@ impl WorldMap {
     pub fn get_neighbours(&self, current_index : &usize) -> Vec<usize> {
         
         // For each direction comparing elevations.
-        let mut resultingElevations = Vec::<usize>::new();
+        let mut resulting_elevations = Vec::<usize>::new();
         let current_position = self.get_coords_from_index(current_index);
 
         if (current_position.1 < self.world_dimensions.1 - 1) && self.is_passable(current_position, (current_position.0, current_position.1 + 1)) {
-            resultingElevations.push(self.get_index_from_coords((current_position.0, current_position.1 + 1)));
+            resulting_elevations.push(self.get_index_from_coords((current_position.0, current_position.1 + 1)));
         }
 
         if current_position.1 > 0 && self.is_passable(current_position, (current_position.0, current_position.1 - 1)) {
-            resultingElevations.push(self.get_index_from_coords((current_position.0, current_position.1 - 1)));
+            resulting_elevations.push(self.get_index_from_coords((current_position.0, current_position.1 - 1)));
         }
 
         if (current_position.0 < self.world_dimensions.0 - 1) && self.is_passable(current_position, (current_position.0 + 1, current_position.1)) {
-            resultingElevations.push(self.get_index_from_coords((current_position.0 + 1, current_position.1)));
+            resulting_elevations.push(self.get_index_from_coords((current_position.0 + 1, current_position.1)));
         }
 
         if current_position.0 > 0 && self.is_passable(current_position, (current_position.0 - 1, current_position.1)) {
-            resultingElevations.push(self.get_index_from_coords((current_position.0 - 1, current_position.1)));
+            resulting_elevations.push(self.get_index_from_coords((current_position.0 - 1, current_position.1)));
         }
 
-        resultingElevations
+        resulting_elevations
     }
 }
 
@@ -151,8 +150,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();

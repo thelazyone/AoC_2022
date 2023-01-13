@@ -17,22 +17,6 @@ enum OrderedListValue {
 }
 
 
-// Generates the input string from the structures. Just for debugging purposes.
-fn convert_to_string (input : OrderedListValue ) -> String {
-    match input {
-        OrderedListValue::Number(value) => return value.to_string(),
-        OrderedListValue::Vector(vect) => {
-            
-            // Converting to string (recursively) each element of the vector. 
-            // Then removing the last comma and adding brackets.
-            let mut tempString = vect.into_iter().map(|val| convert_to_string(val) + ",").collect::<String>();
-            tempString.pop();
-            return format!("[{}]", tempString);
-        },
-    };
-}
-
-
 // Parsing a single element of a line. Returns the remaining part of the string, if present.
 fn parse_element (input : String) -> (OrderedListValue, Option<String>) {
     
@@ -70,7 +54,7 @@ fn parse_element (input : String) -> (OrderedListValue, Option<String>) {
 // Parsing a whole line.
 fn parse_list (input : String) -> OrderedListValue {
 
-    let mut elementsVector = Vec::<OrderedListValue>::new();
+    let mut elements_vector = Vec::<OrderedListValue>::new();
 
     // Looking for the two outmost square parenthesis
     let mut substrings = Some(input.split_once("[").unwrap().1.rsplit_once("]").unwrap().0.to_string());
@@ -86,10 +70,10 @@ fn parse_list (input : String) -> OrderedListValue {
     while substrings.is_some() { // TODO bad while
         let list_elem : OrderedListValue;
         (list_elem, substrings) = parse_element(substrings.unwrap().to_string());
-        elementsVector.push(list_elem);
+        elements_vector.push(list_elem);
     }
 
-    OrderedListValue::Vector(elementsVector)
+    OrderedListValue::Vector(elements_vector)
 }
 
 
@@ -150,8 +134,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();
@@ -214,6 +198,22 @@ fn main() -> io::Result<()> {
 mod tests {
     use super::*;
 
+    // Generates the input string from the structures. Just for debugging purposes.
+    fn convert_to_string (input : OrderedListValue ) -> String {
+        match input {
+            OrderedListValue::Number(value) => return value.to_string(),
+            OrderedListValue::Vector(vect) => {
+                
+                // Converting to string (recursively) each element of the vector. 
+                // Then removing the last comma and adding brackets.
+                let mut temp_string = vect.into_iter().map(|val| convert_to_string(val) + ",").collect::<String>();
+                temp_string.pop();
+                return format!("[{}]", temp_string);
+            },
+        };
+    }
+
+
     // General Test
     #[test]
     fn global_test_part_1() {
@@ -223,5 +223,16 @@ mod tests {
     #[test]
     fn global_test_part_2() {
         assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 140);
+    }    
+    
+
+    // Parsing test
+    #[test]
+    fn string_parsing_test() {
+        let test_string = "[[9,[],[[7,8,10],1,[7,6,9],[7,5,0],8]],\
+        [[3,[],[4,8],[]]],[10,[9,0,7,9],[[0,8,8],[],[6],[4,6],[8,7,0,9]],\
+        [10,[],8,[],5]],[[[7,10],[5,10],[4,0,8,3,9],[]],[2]]]".to_string();
+
+        assert!(test_string.clone().eq(&convert_to_string(parse_list(test_string))));
     }    
 }

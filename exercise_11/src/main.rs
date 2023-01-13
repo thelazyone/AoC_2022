@@ -150,8 +150,8 @@ fn execute (input_path : String)  -> Option<(u64, u64)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u64 = 0;
-    let mut result_part_2 : u64 = 0;
+    let result_part_1 : u64 = 0; // Part 1 is no longer accessible for this exercise. 
+    let result_part_2 : u64;
 
     // First reading the input string - easy.
     let mut monkeys_lines_vec = Vec::<Vec<String>>::new();
