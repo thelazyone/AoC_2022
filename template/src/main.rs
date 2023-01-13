@@ -5,8 +5,6 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
 // utility
-use std::cmp;
-
 
 // Primary Function
 fn execute (input_path : String)  -> Option<(u32, u32)> {
@@ -16,8 +14,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let reader = BufReader::new(file);
 
     // Results variables:
-    let mut result_part_1 : u32 = 0;
-    let mut result_part_2 : u32 = 0;
+    let result_part_1 : u32;
+    let result_part_2 : u32;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();
@@ -30,6 +28,8 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     println!("read {} lines from input", lines_vec.len());
     assert!(lines_vec.len() > 1);
 
+    result_part_1 = 0;
+    result_part_2 = 0;
     Some((result_part_1, result_part_2))
 }
 
@@ -54,11 +54,11 @@ mod tests {
     // General Test
     #[test]
     fn global_test_part_1() {
-        //assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 21);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 21);
     }    
 
     #[test]
     fn global_test_part_2() {
-        //assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
     }    
 }
