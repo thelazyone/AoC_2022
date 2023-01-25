@@ -1,4 +1,4 @@
-// Exercise 12: calculating the path of a cursor following the movement of another
+// Exercise 12: Implementing pathfinding to reach the summit of a mountain
 
 // For reading/parsing
 use std::fs::File;

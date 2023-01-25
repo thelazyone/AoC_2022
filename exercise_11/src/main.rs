@@ -1,4 +1,4 @@
-// Exercise 11: calculating the path of a cursor following the movement of another
+// Exercise 11: following exchanges between different actors (monkeys) while tracking values.
 // Implementing only part 2, because the optimization made part 1 unfeasible : the "/3"
 // operation doesn't work well with the implemented structure.
 

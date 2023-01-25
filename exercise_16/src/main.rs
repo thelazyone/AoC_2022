@@ -7,6 +7,84 @@ use std::io::{self, prelude::*, BufReader};
 // utility
 use std::collections::HashMap;
 use regex::Regex;
+use std::time::Instant;
+
+// Implementing Dijkstra's algoritm (Similar to Day 12)
+// TODO move it in a "utilities" with generic type.
+#[derive(Debug)]
+struct DijkstraGraphNode {
+    current_distance : u32,
+    previous_node : String,
+}
+impl DijkstraGraphNode {
+    fn new () -> DijkstraGraphNode {
+        DijkstraGraphNode {
+            current_distance : u32::MAX,
+            previous_node : "".to_string(),
+        }
+    }
+}
+
+fn run_dijkstra (graphs_map : &HashMap<String, Valve>, starting_point : String, target_point : String,) -> Option<u32> {
+
+    // Creating a vector of the graph nodes. No need to look for the connections here.
+    let mut unused_nodes : HashMap<String, DijkstraGraphNode> = graphs_map.keys().map(|x| (x.clone(), DijkstraGraphNode::new())).collect(); 
+    let mut used_nodes = Vec::<String>::new();
+
+    // Setting the distance of the starting node as Zero.
+    unused_nodes.entry(starting_point).and_modify(|value| value.current_distance = 0);
+
+    // Iterating the Dijkstra steps
+    while !unused_nodes.is_empty() {
+
+        // First finding the smaller value in the map.
+        let smallest_key : String = unused_nodes
+        .iter()
+        .max_by(|a, b| b.1.current_distance.cmp(&a.1.current_distance))
+            .map(|(k, _v)| k).unwrap().clone();
+        let smallest_distance = unused_nodes.get(&smallest_key).unwrap().current_distance;
+
+        // Sanity check: if the smallest distance is MAX it means that there are no paths to go through.
+        if smallest_distance == u32::MAX {
+
+            // Nothing to do, this distance is not good
+            return None;
+        }
+        
+        // If the current position is the target, ending the loop.
+        if smallest_key == target_point {
+            return Some(unused_nodes.get(&smallest_key).unwrap().current_distance);
+        }
+
+        // Iterating on all the available paths from the vector: 
+        let current_neighbours = graphs_map.get(&smallest_key).unwrap().connected.clone();
+        for (neighbour_idx, neighbour_key) in current_neighbours.iter().enumerate() {
+
+            // If already processed, skip
+            if used_nodes.contains(&neighbour_key) {
+                continue;
+            }
+
+            // Otherwise, adding the distance to the already present one.
+            let neighbour_distance = unused_nodes.get(neighbour_key).unwrap().current_distance;
+            let new_distance = smallest_distance + graphs_map.get(&smallest_key).unwrap().connected_distance[neighbour_idx];
+            if new_distance < neighbour_distance {
+
+                // Updating the distance and the "last node before" index
+                unused_nodes.entry(neighbour_key.clone()).and_modify(
+                    |value| value.current_distance = new_distance.clone());
+                unused_nodes.entry(neighbour_key.clone()).and_modify(
+                    |value| value.previous_node = smallest_key.clone());
+            }
+        }
+
+        // Once done, removing the element from the map and adding the index to the "used" ones.
+        unused_nodes.remove(&smallest_key);
+        used_nodes.push(smallest_key);
+    }
+
+    panic!("Something went wrong, no path found!");
+}
 
 
 // Simple graph data structure. Since it's a small graph, we can afford 
@@ -89,14 +167,14 @@ fn get_next_working_valve_or_split(
 
 // Creates a new valves map, removing all unnecessary rooms.
 // The new connections for each room will have distances that are >= 1
-fn simplify_valves_map (valves_map : &HashMap<String, Valve>) -> HashMap<String, Valve> {
+fn simplify_valves_map (valves_map : &HashMap<String, Valve>, starting_valve_name : &String) -> HashMap<String, Valve> {
     let mut new_map = HashMap::<String, Valve>::new();
 
     // For each element of the map, checking all working valves:
     for (valve_name, valve) in valves_map {
 
         // Ignoring all the valves that are not splits or working valves
-        if valve_name != "AA" && !is_working_valve_or_split(&valve) {
+        if valve_name != starting_valve_name && !is_working_valve_or_split(&valve) {
             continue;
         }
 
@@ -121,11 +199,30 @@ fn simplify_valves_map (valves_map : &HashMap<String, Valve>) -> HashMap<String,
 }
 
 
+fn calculate_all_distances (valves_map : &HashMap<String, Valve>) -> HashMap<String, HashMap<String, u32>> {
+    // For each valve calculating the distance of all the other valves.
+    let mut all_valves_distances = HashMap::<String, HashMap<String, u32>>::new();
+    let valves_names = valves_map.keys().cloned().collect::<Vec<String>>();
+    for (valve_str, _) in valves_map {
+        let mut valve_distances =  HashMap::<String, u32>::new();
+        for other_valve_str in &valves_names {
+            valve_distances.insert(
+                other_valve_str.clone(),
+                run_dijkstra(valves_map, valve_str.clone(), other_valve_str.clone()).unwrap());
+        }
+        all_valves_distances.insert(valve_str.clone(), valve_distances);
+    }
+
+    all_valves_distances
+}
+
+
 // Recursively searches through the rooms, returning the output through the various
 // paths.
 // Note that the output is returned directly as the flux times the remaining time.
 fn find_path_maximum_steam (
     valves_map : &HashMap<String, Valve>, 
+    distances_map : &HashMap<String, HashMap<String, u32>>, 
     path : Vec<String>,
     starting_valve_str : String,
     starting_flux : u32,
@@ -134,66 +231,53 @@ fn find_path_maximum_steam (
     max_iterations : u32) -> (Vec<String>, u32) {
 
     let current_valve = valves_map.get(&starting_valve_str).unwrap();
+    let mut new_path = path.clone();
 
     // Takes one turn to activate the valve, but only if it's a new one.
-    let new_iteration;
-    let new_steam;
-    let new_flux;
-    // if !path.contains(&starting_valve_str){
-    //     new_iteration = current_iteration + 1;
-    //     new_steam = total_steam + starting_flux; // one iteration at current flux
-    //     new_flux = starting_flux + current_valve.flux;
-    // }
-    // else
-    {
-        new_iteration = current_iteration;
-        new_steam = total_steam;
-        new_flux = starting_flux;
-    }
+    new_path.push(starting_valve_str.clone());
+    let new_iteration = current_iteration + 1;
+    let new_steam = total_steam + starting_flux; // one iteration at current flux
+    let new_flux = starting_flux + current_valve.flux;
 
-    // Updating the path with the current 
-    let mut new_path = path;
-    //new_path.push(starting_valve_str.clone());
-
-    // moving through all the connections, as long as there's enough remaining iterations
-    let mut max_flux = 0;
-    let mut max_path = Vec::<String>::new();
-    for (connection_name, connection_distance) in
-        current_valve.connected.iter().zip(&current_valve.connected_distance) {
+    // moving to all the other valves, as long as there's enough remaining iterations
+    let mut max_steam = new_steam;
+    let mut max_path = new_path.clone();
+    for (other_valve_str, other_valve_dist) in distances_map.get(&starting_valve_str).unwrap() {
 
         // If the target is too far in the path just return the final flux
         // Since it takes one step to activate the valve, using a -2 in the check
-        if new_iteration + connection_distance > max_iterations - 2
+        // Same applies if the target to reach has been done already: this tests what happens
+        // if the actor doesn't move until the end.
+        if new_path.contains(other_valve_str) || new_iteration + other_valve_dist > max_iterations - 1
         {
-            let final_flux = new_steam + new_flux * (max_iterations - new_iteration - 1);
-            if final_flux > 2000 {
-            println!("Cell {}, iteration {}, distance {}, max {}, adding {}, final {}", 
-            starting_valve_str, new_iteration, connection_distance, max_iterations,  
-            new_flux * (max_iterations - new_iteration - 1),final_flux);}
-
-            return (new_path.clone(), final_flux);
+            let final_steam = new_steam + new_flux * (max_iterations - new_iteration);
+            if final_steam > max_steam {
+                max_steam = final_steam;
+            }
         }
+        else {
+            let (found_path, found_steam) = find_path_maximum_steam (
+            valves_map, 
+            distances_map,
+            new_path.clone(),
+            other_valve_str.clone(),
+            new_flux,
+            new_steam + new_flux * other_valve_dist,
+            new_iteration + other_valve_dist,
+            max_iterations);
 
-        // Otherwise checking the next connections:
-        let (found_path, found_flux) = find_path_maximum_steam (
-        valves_map, 
-        new_path.clone(),
-        connection_name.clone(),
-        new_flux,
-        new_steam + new_flux * connection_distance,
-        new_iteration + connection_distance,
-        max_iterations);
-
-        if found_flux > max_flux {
-            max_flux = found_flux;
-            max_path = found_path;
+            if found_steam > max_steam {
+                max_steam = found_steam;
+                max_path = found_path;
+            }
         }
     }
 
-    // At this point all the values obtained are after 30 iterations, so I just
+    // At this point all the values obtained are after N iterations, so I just
     // search the maximum of them all.
-    (max_path, max_flux)
+    (max_path, max_steam)
 }
+
 
 // Primary Function
 fn execute (input_path : String)  -> Option<(u32, u32)> {
@@ -221,29 +305,88 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let mut valves_map = HashMap::<String, Valve>::new();
     for line in lines_vec {
         let pair = Valve::new_from_line(&line).unwrap();
-        println!("Creating: {:?}", pair);
         valves_map.insert(pair.0, pair.1);
     }
 
     // Creating a data structure that ignores the rooms with flux == 0,
     // which are de facto not valves.
-    let valves_map = simplify_valves_map(&valves_map);
-    println!("there are {} active valves", valves_map.len());
+    let valves_map = simplify_valves_map(&valves_map, &"AA".to_string());
+    println!("there are {} active valves:", valves_map.len());
+    for line in &valves_map {
+        println!("room is: {:?}", line);
+    }
 
+    // Calculating all distances once: 
+    let distances_map = calculate_all_distances(&valves_map);
+    
     // Iterating on ALL permutations. It's not THAT many. 
+    let now = Instant::now();
+    let max_iterations = 30;
     let (path_taken, max_steam) = find_path_maximum_steam(
         &valves_map, 
+        &distances_map, 
         Vec::<String>::new(),
         "AA".to_string(), 
         0, 
         0, 
         0, 
-        30);
+        max_iterations + 1 /* For the valve to open */);
     println!("Path taken is {:?} for a total of {} steam.", path_taken, max_steam);
-
-
     result_part_1 = max_steam;  
-    result_part_2 = 0;
+    println!("Part A took {} ms", now.elapsed().as_millis());
+
+    // For two actors, using a dumb but very feasible approach: iterating on all the possible pairs
+    // of subsets of the valves. Each time we got to re-calculate the distances, run the find function
+    // and look for the faster.
+    let mut max_steam_two_actors = 0;
+    let max_iterations = 26;
+    let now = Instant::now();
+    for subset_idx in 0..i32::pow(2, (valves_map.len() - 1) as u32) {
+
+        if subset_idx % 100 == 0 {
+            println!("iteration {} of {}", subset_idx, i32::pow(2, (valves_map.len() - 1) as u32));
+        }
+
+        // Setting a path of "previously explored" paths to be avoided, so that
+        // the algo won't have to go through them.
+        let mut path_a = Vec::<String>::new();
+        let mut path_b = Vec::<String>::new();
+        for (elem_index, elem) in valves_map.iter().enumerate() {
+            if subset_idx / i32::pow(2, elem_index as u32) % 2 == 0{
+                path_a.push(elem.0.clone());
+            }
+            else {
+                path_b.push(elem.0.clone());
+            }
+        }
+
+        let (_, max_steam_a) = find_path_maximum_steam(
+            &valves_map, 
+            &distances_map, 
+            path_a,
+            "AA".to_string(), 
+            0, 
+            0, 
+            0, 
+            max_iterations + 1 /* For the valve to open */);
+
+        let (_, max_steam_b) = find_path_maximum_steam(
+            &valves_map, 
+            &distances_map, 
+            path_b,
+            "AA".to_string(), 
+            0, 
+            0, 
+            0, 
+            max_iterations + 1 /* For the valve to open */);
+
+        if max_steam_two_actors < max_steam_a + max_steam_b {
+           max_steam_two_actors = max_steam_a + max_steam_b;
+        }
+    }
+    println!("Part B took {} ms", now.elapsed().as_millis());
+
+    result_part_2 = max_steam_two_actors;
     Some((result_part_1, result_part_2))
 }
 
@@ -273,6 +416,6 @@ mod tests {
 
     #[test]
     fn global_test_part_2() {
-        //assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 1707);
     }    
 }
