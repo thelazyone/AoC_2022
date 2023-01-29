@@ -9,6 +9,7 @@ use std::io::{self, prelude::*, BufReader};
 enum Directions {
     Left,
     Right,
+    Down,
 }
 
 #[derive(PartialEq)]
@@ -20,15 +21,15 @@ enum BlockType {
     El,
 }
 
+#[derive(Clone)]
 struct TetrisBlock {
     // Blocks are defined from the bottom-left corner.
     shape : Vec<Vec<bool>>,
     altitude : u32,
-    pos : u32,
+    x_pos : u32,
 }
 impl TetrisBlock {
-    
-    fn new(block_type : BlockType, altitude : u32) -> TetrisBlock {
+    fn new(block_type : BlockType, altitude : u32, pos : u32) -> TetrisBlock {
         // Creating the vec based on the shape:
         let mut block = Vec::<Vec<bool>>::new();
         match block_type {
@@ -51,83 +52,85 @@ impl TetrisBlock {
                 block.push(vec![false, false, true]);
                 block.push(vec![false, false, true]);},
         };
-        TetrisBlock{shape : block, altitude : altitude, pos : 2}
+        TetrisBlock{shape : block, altitude : altitude, x_pos : pos}
     }
 
-    fn move_block(&mut self, direction : &Directions, board : &TetrisBoard) {
-        if !self.collision_with_borders(board.get_width(), &direction) {
-            match direction {
-                &Directions::Left => self.pos = self.pos - 1,
-                &Directions::Right => self.pos = self.pos + 1,
-            };
-        }
-    }
 
-    // Returning if collided with bottom
-    fn fall_block(&mut self, board : &TetrisBoard) -> Option<Vec<Vec<bool>>> {
-
-        // Check the line below the current one.
-        for y_idx in 0..self.get_height() {
-
-            let line_to_inspect = self.altitude + y_idx;
-            if board.board.len() <= line_to_inspect as usize {
-                continue;
+    fn try_move_block(&mut self, direction : &Directions, board : &TetrisBoard) -> Option<Vec<Vec<bool>>> {
+        
+        if self.collision_with_borders(board.get_width(), &direction) ||
+            self.collision_with_map(board, direction){
+                return Some(self.add_block_to_map(board));
             }
 
-            if self.altitude <= 0 || self.collision_with_map(board) {
-
-                // Creating the new board adding white lines if necessary.
-                let mut new_board = board.board.clone();
-                while new_board.len() < (self.altitude + self.get_height() + 3) as usize {
-                    new_board.push(vec![false; new_board[0].len()]);
-                }
-
-                for shape_line in 0..self.get_height() {
-                    for x_idx in 0..self.get_width() {
-                        new_board[(self.altitude + shape_line) as usize][(x_idx + self.pos) as usize] =
-                        new_board[(self.altitude + shape_line) as usize][(x_idx + self.pos) as usize]
-                         || 
-                        self.shape[shape_line as usize][x_idx as usize];
-                    }
-                }
-
-                return Some(new_board);
-            }
-        }
-
-        self.altitude -= 1;
+        self.move_block(direction);
         None
     }
 
 
+    fn move_block(&mut self, direction : &Directions) {
+        match direction {
+            &Directions::Left => self.x_pos -= 1,
+            &Directions::Right => self.x_pos += 1,
+            &Directions::Down => self.altitude -= 1,
+        };
+    }
+
+
+    fn add_block_to_map (&self, board : &TetrisBoard) -> Vec<Vec<bool>> {
+
+        // Creating the new board adding white lines if necessary.
+        let mut new_board = board.board.clone();
+        while new_board.len() < (self.altitude + self.get_height() + 3) as usize {
+            new_board.push(vec![false; new_board[0].len()]);
+        }
+
+        for shape_line in 0..self.get_height() {
+            for x_idx in 0..self.get_width() {
+                new_board[(self.altitude + shape_line) as usize][(x_idx + self.x_pos) as usize] =
+                new_board[(self.altitude + shape_line) as usize][(x_idx + self.x_pos) as usize] || 
+                self.shape[shape_line as usize][x_idx as usize];
+            }
+        }
+
+        new_board
+    }
+
+
     fn collision_with_borders(&self, board_width: u32, direction : &Directions) -> bool {
-        (self.pos <= 0 && direction == &Directions::Left) ||
-        (self.pos >= board_width - self.get_width() && direction == &Directions::Right)
+        (self.x_pos <= 0 && direction == &Directions::Left) ||
+        (self.x_pos >= board_width - self.get_width() && direction == &Directions::Right) || 
+        (self.altitude == 0 && direction == &Directions::Down)
     } 
 
     
-    fn collision_with_map(&self, board : &TetrisBoard) -> bool {
+    fn collision_with_map(&self, board : &TetrisBoard, direction : &Directions) -> bool {
+
+        // Creating a copy of the block and moving it.
+        let mut block_copy : TetrisBlock = self.clone();
+        block_copy.move_block(direction);
 
         // checking each line:
-        for y_idx in 0..self.get_height(){
-            let y_coord = y_idx + self.altitude - 1; // Checking the space below
-           
-            for x_idx in 0..self.get_width() {
+        for y_idx in 0..block_copy.get_height(){
+            let y_map = y_idx + block_copy.altitude; // Checking the row below
 
-                let x_coord = x_idx + self.pos;
+            if y_map >= board.board.len() as u32 {
+                continue;
+            }
 
-                if board.board.len() <= y_coord as usize {
-                    continue;
-                }
-                
-                if board.board[y_coord as usize][x_coord as usize] && 
-                   self.shape[y_idx as usize][x_idx as usize] {
-                   return true;
+            for x_idx in 0..block_copy.get_width() {
+
+                let x_map = x_idx + block_copy.x_pos;
+
+                if board.board[y_map as usize][x_map as usize] && 
+                    block_copy.shape[y_idx as usize][x_idx as usize] {
+                    return true;
                 }
             }
         }
         false
     }
+
 
     // Converting a counter into a block type:
     fn block_type_from_num(number : u32) -> BlockType {
@@ -147,6 +150,7 @@ impl TetrisBlock {
         self.shape[0].len() as u32
     }
 
+
     fn get_height(&self) -> u32 {
         self.shape.len() as u32
     }
@@ -154,23 +158,25 @@ impl TetrisBlock {
 
 
 struct TetrisBoard {
-    board : Vec<Vec<bool>>
+    board : Vec<Vec<bool>>,
+    time_counter : u32,
+    type_counter : u32,
 }
 impl TetrisBoard {
-
     fn new(width : u32) -> TetrisBoard {
         let one_line = std::vec::from_elem(false, width as usize);
-        TetrisBoard {board : std::vec::from_elem(one_line, 1)}
+        TetrisBoard {board : std::vec::from_elem(one_line, 1), time_counter : 0, type_counter : 0}
     }
+
 
     fn get_width(&self) -> u32 {
         self.board[0].len() as u32
     } 
 
+
     fn get_height(&self) -> u32 {
         for (index, line) in self.board.iter().enumerate() {
             if !line.contains(&true) {
-                println!("height is {}", index);
                 return index as u32;
             }
         }
@@ -178,25 +184,67 @@ impl TetrisBoard {
         self.board.len() as u32
     }
 
-    fn _draw_board(&self) -> String {
+
+    fn draw_top_rows(&self, lines_number : usize) -> String {        
         let mut out_string = "".to_string();
-        for row in &self.board {
-            let new_string = row.iter().map(|&val| {
-                match &val {
-                    true => '#',
-                    false => ' ',
-                }
-            }).collect::<String>().clone(); 
-            out_string += &new_string;
+        for row_idx in 0..lines_number {
+            out_string += &self.draw_row(&self.board[self.board.len() - 1 - lines_number + row_idx]);
             out_string += "\n";
         }
         out_string
     }
+
+
+    fn draw_row(&self, row : &Vec<bool>) -> String {
+        row.iter().map(|&val| {
+            match &val {
+                true => '#',
+                false => ' ',
+            }
+        }).collect::<String>().clone()
+    }
+
+
+    fn _draw_board(&self) -> String {
+        let mut out_string = "".to_string();
+        for row in &self.board {
+            out_string += &self.draw_row(row);
+            out_string += "\n";
+        }
+        out_string
+    }
+
+
+    fn add_block_till_bottom(&mut self, commands_vec : &Vec<Directions>) {
+        let mut new_block = TetrisBlock::new(
+            TetrisBlock::block_type_from_num(self.type_counter), 
+            self.get_height() + 3,
+            2 /* Always 2 */); 
+
+        self.type_counter += 1;
+            
+        // Looping until the block reaches the bottom.
+        loop {
+
+            // Moving the block if possible.
+            new_block.try_move_block(&commands_vec[self.time_counter as usize % commands_vec.len()], self);
+
+            self.time_counter += 1;
+
+            // Making the block fall:
+            if let Some(new_map) = new_block.try_move_block(&Directions::Down, self) {
+                self.board = new_map;
+                break;
+            }
+        }
+    }
 }
 
 
+
+
 // Primary Function
-fn execute (input_path : String)  -> Option<(u32, u32)> {
+fn execute (input_path : String)  -> Option<(u32, u64)> {
 
     // Handling the reading/parsing
     let file = File::open(input_path).unwrap();
@@ -204,10 +252,11 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 
     // Results variables:
     let result_part_1 : u32;
-    let result_part_2 : u32;
+    let result_part_2 : u64;
 
     // First reading the input string - easy.
     let mut lines_vec = Vec::<String>::new();
+
     // Finally reading the stuff.
     for curr_line in reader.lines() {
         if let Ok(line) = curr_line {
@@ -226,58 +275,85 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
             _ => panic!("Wrong input character!"),
         }
     }
+    println!("There are {} directional commands", commands_vec.len());
 
     // Creating the tetris board: 
     let mut tetris_board = TetrisBoard::new(7);
-    //println!("Debug: \n{}", tetris_board._draw_board());
 
     // Iterating through the various turns:
     let max_rocks = 2022;
-    let mut current_rocks = 0;
-    let mut block_type_counter = 0;
-    let mut time_counter = 0;
-    while current_rocks <= max_rocks {
+    for _ in 0..max_rocks {
         // First adding a new stone
-        let mut new_block = TetrisBlock::new(TetrisBlock::block_type_from_num(block_type_counter), tetris_board.get_height() + 3); 
-        //println!("Adding new rock at {}", tetris_board.get_height() + 3);
-
-        current_rocks += 1;
-        block_type_counter += 1;
-
-        // Looping until the block reaches the bottom.
-        loop {
-
-            // Moving the block if possible.
-            if commands_vec.len() > time_counter {
-                new_block.move_block(&commands_vec[time_counter], &tetris_board);
-                //println!("moving {:?}", commands_vec[time_counter]);
-            }
-
-            // Making the block fall:
-            println!("falling to {}", new_block.altitude);
-            if let Some(new_map) = new_block.fall_block(&tetris_board) {
-                tetris_board.board = new_map;
-                //println!("Debug: \n{}", tetris_board._draw_board());
-                break;
-            }
-
-            time_counter += 1;
-        }
-
-        if current_rocks == 6 {println!("Debug: \n{}", tetris_board._draw_board()); panic!("ahiA");}
-        //println!("current height at rock {} is {}", current_rocks,tetris_board.get_height());
+        tetris_board.add_block_till_bottom(&commands_vec);
     }
     result_part_1 = tetris_board.get_height();
 
-    result_part_2 = 0;
+    // For part 2 I am expected to iterate 1E12 times, which doesn't sound very feasible.
+    // I'd instead search for a periodicity of the input values, and when found just multiply 
+    // until necessary.
+    let mut tetris_board = TetrisBoard::new(7);
+    let mut remaining_rocks : u64 = 1000000000000;
+    println!("Looping in search of periodicity.");
+
+    // First applying a bunch of stones (1000), to make sure that the bottom is distant enough.
+    let compare_start_time: u32;
+    let start_rocks = 1000;
+    for _ in 0..start_rocks {
+        // First adding a new stone
+        tetris_board.add_block_till_bottom(&commands_vec);
+    }
+    compare_start_time = tetris_board.time_counter.clone();
+    remaining_rocks -= 1000;
+
+    // Retrieving the last, say, 10 lines. it's not a guarantee that the periodicity is kept but it's safe enough.
+    let start_pattern = tetris_board.draw_top_rows(10); 
+    let start_height = tetris_board.get_height(); 
+    let mut total_height : u64 = 0; 
+
+    // Now applying stones until we reach a number of time iterations that is multiple of the instructions. Then, comparing the patterns.
+    for loop_count in 1..100000 {
+        // First adding a new stone
+        tetris_board.add_block_till_bottom(&commands_vec);
+        remaining_rocks -= 1;
+
+        // Checking if the time is multiple: 
+        if (tetris_board.time_counter - compare_start_time) as usize % commands_vec.len() == 0 {
+            if start_pattern == tetris_board.draw_top_rows(10) {
+                println!("found repeating pattern at loop {}.", loop_count);
+
+                // This means that every loop_count iterations the pattern repeats.
+                let delta_height = tetris_board.get_height() - start_height;
+
+                // The remaining rocks number is divided in periodic steps, and the delta height is added each time.
+                let number_of_periods = remaining_rocks / loop_count;
+                remaining_rocks -= number_of_periods * loop_count;
+                let multi_period_height = delta_height as u64 * number_of_periods;
+                println!("There are {} periods.", number_of_periods);
+
+                // Now iterating for the remaining rocks.
+                for _ in 0..remaining_rocks {
+                    tetris_board.add_block_till_bottom(&commands_vec);
+                } 
+
+                // height is this plus the periodic above. 
+                total_height = tetris_board.get_height() as u64 + multi_period_height;
+
+                // Exiting the loop.
+                break;
+            }
+        }
+    }
+
+    result_part_2 = total_height;
     Some((result_part_1, result_part_2))
 }
+
 
 // Main 
 fn main() -> io::Result<()> {
     println!("Welcome to Advent of Code 2022 - Day 17!");
 
-    let results = execute("./data/test.txt".to_string()).unwrap();
+    let results = execute("./data/input.txt".to_string()).unwrap();
     
     println!("Part 1 result is {}.", results.0);
     println!("Part 2 result is {}.", results.1);
@@ -294,11 +370,11 @@ mod tests {
     // General Test
     #[test]
     fn global_test_part_1() {
-        assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 21);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 3068);
     }    
 
     #[test]
     fn global_test_part_2() {
-        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 1514285714288);
     }    
 }
