@@ -6,7 +6,9 @@ use std::io::{self, prelude::*, BufReader};
 use std::collections::HashSet;
 
 // Defining a simple 3D point, don't want to use complex stuff for this.
-type Point = [i32; 3];
+const DIMENSIONS : usize= 3;
+type Point = [i32; DIMENSIONS];
+
 
 #[derive(Debug)]
 struct VoxelSet {
@@ -63,6 +65,38 @@ impl VoxelSet {
         }
         all_coords
     }
+
+
+    fn find_cluster_around_lava(&self, pos : &Point, limits : &Vec::<(i32, i32)>) -> HashSet<Point> {
+
+        let mut previous_visited = HashSet::<Point>::new();
+        self.find_cluster_iterative(pos, &mut previous_visited, limits);
+        previous_visited
+    }
+
+
+    fn find_cluster_iterative(
+        &self, pos : &Point,
+        previous_visited : &mut HashSet<Point>, 
+        limits : &Vec::<(i32, i32)>) {
+        
+        // Check if already visited.
+        if previous_visited.contains(pos) || self.voxels.contains(pos){
+            return;
+        }
+
+        // Otherwise add to previous, and call function to all neighbours
+        previous_visited.insert(pos.clone());
+        for neighbour in VoxelSet::get_adjacent_coords(pos) {
+            if neighbour[0] < limits[0].0 || neighbour[0] > limits[0].1 ||
+                neighbour[1] < limits[1].0 || neighbour[1] > limits[1].1 ||
+                neighbour[2] < limits[2].0 || neighbour[2] > limits[2].1 {
+                    continue;
+                }
+
+            self.find_cluster_iterative(&neighbour, previous_visited, limits);
+        }
+    }
 }
 
 
@@ -102,11 +136,43 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 
     // part 2 requires to find air pockets within the lava and remove them from the surface calculation.
     
+    // Sampling random points and clustering until reaching the edge. 
+    // To that, finding the bounding box.
+    let mut limits = Vec::<(i32, i32)>::new();
+    for dim_idx in 0..DIMENSIONS {
+        limits.push((
+            lava_space.voxels.iter()
+            .min_by(|a, b| {a[dim_idx].cmp(&b[dim_idx])}).unwrap()[dim_idx] - 1,
+            lava_space.voxels.iter()
+            .max_by(|a, b| {a[dim_idx].cmp(&b[dim_idx])}).unwrap()[dim_idx] + 1));
+    }
 
+    // Exploring the bounded space starting from the bottom-left point (which is outside)
+    // Till this point dimensions are parametrical. For the iteration i set it fixed, but a better 
+    // solution could be found.let zero_point: Point = vec!{limits[0].0, limits[1].0, limits[2].0}.try_into().unwrap();
+    let zero_point: Point = vec!{limits[0].0, limits[1].0, limits[2].0}.try_into().unwrap();
+    println!("Finding clusters, starting from {:?}.", zero_point);
+    let outside_voxels = lava_space.find_cluster_around_lava(&zero_point, &limits).clone();
+    println!("outside voxels are {}.", outside_voxels.len());
 
-    result_part_2 = 0;
+    // Finding all points: 
+    let mut lava_space_filled : VoxelSet = VoxelSet::new();
+    for x in limits[0].0..limits[0].1 + 1 {
+        for y in limits[1].0..limits[1].1 + 1 {
+            for z in limits[2].0..limits[2].1 + 1 {
+                let temp_point: Point = vec!{x, y, z}.try_into().unwrap();
+                if !outside_voxels.contains(&temp_point) {
+                    lava_space_filled.add_voxel(&temp_point);
+                }
+            }
+        }
+    }
+    println!("reciprocal voxels are {}.", lava_space_filled.voxels.len());
+    result_part_2 = lava_space_filled.calculate_surface() as u32;
+
     Some((result_part_1, result_part_2))
 }
+
 
 // Main 
 fn main() -> io::Result<()> {
