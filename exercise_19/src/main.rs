@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 use regex::Regex;
 use std::collections::HashMap;
+use std::cmp::max;
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -17,10 +18,19 @@ enum ResourceType {
 }
 type ResourcesVect = [u32; ResourceType::ResourcesNumber as usize];
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum BuildingCommand {
+    Build(ResourceType),
+    WaitFor(Vec<ResourceType>),
+}
+
+
 #[derive(Debug)]
 struct Blueprint {
     robot_costs : HashMap<u32, ResourcesVect>,
 }
+
 impl Blueprint {
     fn new_from_line(line : &String) -> Blueprint {
         let regex_string = 
@@ -49,41 +59,141 @@ impl Blueprint {
 
     fn calculate_maximum_geode_yield(&self, max_steps : u32) -> u32 {
 
+        // Calculating a support max_cost variable:
+        let mut max_costs = vec![0; ResourceType::ResourcesNumber as usize];
+        for idx_cost in 0..ResourceType::ResourcesNumber as usize {
+            for idx_robot in 0..ResourceType::ResourcesNumber as usize {
+                max_costs[idx_cost] = max(max_costs[idx_cost], self.robot_costs[&(idx_robot as u32)][idx_cost])
+            }
+        }
+        max_costs[ResourceType::Geode as usize] = std::u32::MAX;
+
         // Starting with a set of current robots (1 ore, none of the rest)
-        // and passing it in a recursive function.
-        
+        // and passing it in a recursive function.        
         // Calling command "none" the first iteration, which means that no robot will be built
         // This is ok with the input data, but it is a limit of the implementation
-        let explore_result = self.iterative_step_factory(
+        self.iterative_step_factory(
             max_steps, 
+            0,
             &vec!{1, 0, 0, 0}.try_into().unwrap(), 
             &vec!{0, 0, 0, 0}.try_into().unwrap(), 
-            None,
-            Vec::<i32>::new());
-
-        explore_result.1
+            BuildingCommand::WaitFor(Vec::<ResourceType>::new()),
+            &max_costs)
     }
+
+    fn get_available_commands(
+        &self,
+        last_command : BuildingCommand,
+        remaining_steps : u32,
+        resources: &ResourcesVect, 
+        robots: &ResourcesVect, 
+        best_score: u32,
+        max_costs: &Vec<u32>,
+        ) -> Vec<BuildingCommand> {
+            
+            let mut orders_vector = Vec::<BuildingCommand>::new();
+
+            // If there is NO way to get to the "best" result in time, returning with no possible outputs:
+            let mut max_possible_value = resources[ResourceType::Geode as usize];
+            max_possible_value += robots[ResourceType::Geode as usize] * remaining_steps;
+            max_possible_value += ((remaining_steps-1) as f32 * (remaining_steps as f32/ 2.)) as u32;
+            if max_possible_value <= best_score {
+                return orders_vector;
+            }
+
+            // If there's resources for a Geode, ignore all the others. This might be a wrong criteria, though.
+            if Blueprint::resources_enough_for(resources, &self.robot_costs[&(ResourceType::Geode as u32)]){
+                orders_vector.push(BuildingCommand::Build(ResourceType::Geode));
+                return orders_vector;
+            }
+
+            // For each type of robot, adding only if there aren't enough and if it's affordable:
+            for idx in 0..ResourceType::ResourcesNumber as usize {
+
+                // If there are enough robots to cover *ANY* purchase, skip
+                if robots[idx] >= max_costs[idx] {
+                    continue;
+                }
+
+                // If you have more resources of a kind that you could possibly use, skip:
+                if resources[idx] >= max_costs[idx] * remaining_steps {
+                    continue;
+                }
+
+                // If the last command was a wait and the specific resource was one that could have been
+                // built in the last command:
+                if let BuildingCommand::WaitFor(delayed_command) = &last_command {
+                    if delayed_command.contains(&(Blueprint::get_resource_type(idx as u32))){
+                        continue;
+                    }
+                }
+
+                // Finally adding the order, if there are resources enough to build.
+                if Blueprint::resources_enough_for(resources, &self.robot_costs[&(idx as u32)]) {
+                    orders_vector.push(BuildingCommand::Build(Blueprint::get_resource_type(idx as u32)))
+                }
+            }
+
+            // Reversing the vector to get a better chance with higher-tier robots first.
+            orders_vector.reverse();
+
+            // Adding "rest" only if there is some robot that needs time to be purchased.
+            let mut all_robots_purchaseable = true;
+            for idx in 0..ResourceType::ResourcesNumber as usize {
+
+                // 1 if you only have ore, you should check for clay and obsidian only.
+                if robots[ResourceType::Clay as usize] == 0 && 
+                robots[ResourceType::Obsidian as usize] == 0 && 
+                robots[ResourceType::Geode as usize] == 0 &&
+                idx > 1 {
+                    continue;
+                }
+
+                // If you only have ore and clay, ignore the geode (idx 3):
+                if robots[ResourceType::Obsidian as usize] == 0 && 
+                robots[ResourceType::Geode as usize] == 0 &&
+                idx > 2 {
+                    continue;
+                }
+
+                if !Blueprint::resources_enough_for(resources, &self.robot_costs[&(idx as u32)]){
+                    all_robots_purchaseable = false;
+                }
+            }
+            if !all_robots_purchaseable {
+                let building_orders = orders_vector.iter()
+                .filter_map(|command| {
+                    if let BuildingCommand::Build(resource) = command {
+                        Some(resource.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+                orders_vector.push(BuildingCommand::WaitFor(building_orders));
+            }
+
+            orders_vector
+        }
+    
 
     fn iterative_step_factory (
         &self, 
         remaining_steps : u32, 
-        //mut current_best : &u32,
+        current_best : u32,
         current_robots : &ResourcesVect, 
         current_resources : &ResourcesVect,
-        command_to_build : Option<ResourceType>,
-        orders_history: Vec<i32>) -> (Vec<i32>, u32) {
+        command_to_build : BuildingCommand,
+        max_costs : &Vec<u32>) -> u32 /*current result*/ {
 
+        // If the conditions are such that pruning is necessary, doing so.
         let mut new_resources = current_resources.clone();
         let mut new_robots = current_robots.clone();
 
         // Checking the command, executing.
-        if let Some(resource_type) = command_to_build {
-            //println!("remaining step: {}. Enough resources for {:?}",remaining_steps , resource_type);
-
+        if let BuildingCommand::Build(resource_type) = command_to_build {
             // Consuming the resources
             new_resources = Blueprint::subtract_resources(&new_resources, &self.robot_costs[&(resource_type as u32)]);
-
-            //println!("Remaining resources: {:?}.",new_resources);
 
             // Adding a robot. But using the "current robots" value to calculate the extra resources later on.
             new_robots[resource_type as usize] += 1
@@ -91,47 +201,47 @@ impl Blueprint {
 
         // Adding the resources, one for each robot of that kind.
         for idx in 0..ResourceType::ResourcesNumber as usize {
-            new_resources[idx] += current_robots[idx];
+            new_resources[idx] += current_robots[idx]; // Using the robots BEFORE the new one has been created.
         }
 
-        //println!("New Robots: {:?}. New Resource: {:?}.",new_robots, new_resources);
-
         // If the max iteration has been reached, returning the value.
-        if remaining_steps == 0 {
-            let final_score = new_resources[ResourceType::Geode as usize];
-            if final_score > 7 {
-            //println!("End of branch with value {}: {:?}", final_score, orders_history);
-            }
-            return (orders_history, final_score);
+        let final_score = new_resources[ResourceType::Geode as usize];
+        if remaining_steps <= 0 {
+            return final_score;
+        }
+
+        let mut new_best = current_best;
+        if current_best < new_resources[ResourceType::Geode as usize]
+        {
+            new_best = new_resources[ResourceType::Geode as usize];
         }
 
         // If we have more steps, sending all the commands for future branches.
-        
-        // All final geodes results from the branching
-        let mut all_scores = Vec::<(Vec<i32>, u32)>::new();
-        for idx in 0..ResourceType::ResourcesNumber as usize {
-            if Blueprint::resources_enough_for(&new_resources, &self.robot_costs[&(idx as u32)]) {
-                //println!("{:?} are enough for {:?}", &new_resources, &self.robot_costs[&(idx as u32)]);
-                all_scores.push(self.iterative_step_factory(
-                    remaining_steps - 1,
-                    &new_robots,
-                    &new_resources,
-                    Some(Blueprint::get_resource_type(idx as u32)),
-                    [orders_history.clone(), vec![idx as i32]].concat()));
-            }
+        let orders = self.get_available_commands(
+            command_to_build,
+            remaining_steps.clone(), 
+            &new_resources,
+            &new_robots,
+            new_best,
+            max_costs);
+        if orders.is_empty(){
+            return new_resources[ResourceType::Geode as usize];
         }
         
-        // Pushing the "do nothing" command too.
-        // No need to clone orders_history here - this one is always used once.
-        all_scores.push(self.iterative_step_factory(
-            remaining_steps - 1,
-            &new_robots,
-            &new_resources,
-            None,
-            [orders_history, vec![-1]].concat()));
+        // All final geodes results from the branching
+        let mut all_scores = Vec::<u32>::new();
+        for order in orders {
+            all_scores.push(self.iterative_step_factory(
+                remaining_steps - 1,
+                new_best,
+                &new_robots,
+                &new_resources,
+                order,
+                max_costs));
+        }
 
         // Returning the best of the results.
-        all_scores.iter().max().unwrap().clone()
+        all_scores.iter().max().unwrap_or(&new_resources[ResourceType::Geode as usize]).clone()
     }
 
     // Utility functions
@@ -202,13 +312,26 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     }
 
     // For each blueprint calculating the maximum efficiency
-    for blueprint in all_blueprints {
-        let max_efficiency = blueprint.calculate_maximum_geode_yield(24);
+    let mut cumulative_result = 0;
+    for (index, blueprint) in all_blueprints.iter().enumerate(){
+        let max_efficiency = blueprint.calculate_maximum_geode_yield(24 - 1);
+        cumulative_result += max_efficiency * (index as u32 + 1);
         println!("Efficiency for blueprint is {}", max_efficiency);
     }
 
-    result_part_1 = 0;
-    result_part_2 = 0;
+    result_part_1 = cumulative_result;
+
+    // Part 2 is with 32 iterations, but only 3 blueprints.
+    let mut cumulative_result = 1;
+    for (index, blueprint) in all_blueprints.iter().enumerate(){
+        let max_efficiency = blueprint.calculate_maximum_geode_yield(32 - 1);
+        cumulative_result *= max_efficiency;
+        println!("Efficiency for blueprint is {}", max_efficiency);
+        if index >= 2 {
+            break;
+        }
+    }
+    result_part_2 = cumulative_result;
     Some((result_part_1, result_part_2))
 }
 
@@ -216,7 +339,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 fn main() -> io::Result<()> {
     println!("Welcome to Advent of Code 2022 - Day 19!");
 
-    let results = execute("./data/test.txt".to_string()).unwrap();
+    let results = execute("./data/input.txt".to_string()).unwrap();
     
     println!("Part 1 result is {}.", results.0);
     println!("Part 2 result is {}.", results.1);
@@ -233,11 +356,11 @@ mod tests {
     // General Test
     #[test]
     fn global_test_part_1() {
-        assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 21);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().0, 33);
     }    
 
     #[test]
     fn global_test_part_2() {
-        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 8);
+        assert_eq!(execute("./data/test.txt".to_string()).unwrap().1, 62*56);
     }    
 }
