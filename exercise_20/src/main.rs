@@ -3,35 +3,43 @@
 // For reading/parsing
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
+
+// Other useful includes:
 use std::fmt::Debug;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 
 // utility
 
 // The number element has a value and a flag that marks whether it moved or not.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct MovableNumber {
-    value : u32,
+    value : i32,
     has_moved : bool,
 }
 
 // Implementing a linked list, which is easy to swap elements with.
 // I'm sure there is one already out there, but it's worth experimenting.
-#[derive(Debug)]
+
+type ListLink<T> = Option<Rc<RefCell<LoopedLinkedListNode<T>>>>;
+
+#[derive(Debug, Clone)]
 struct LoopedLinkedListNode<T> {
     value: T,
-    prev_element: Option<Box<LoopedLinkedListNode<T>>>,
-    next_element: Option<Box<LoopedLinkedListNode<T>>>,
+    next_element: ListLink<T>,
 }   
 
 pub struct LoopedLinkedList<T> {
-    element_zero: Option<Box<LoopedLinkedListNode<T>>>,
+    first_element: ListLink<T>,
+    last_element: ListLink<T>,
     total_size : usize,
 }
 
 impl<T> LoopedLinkedList<T> where T: Copy + Debug {
 
     fn new()->LoopedLinkedList<T> {
-        LoopedLinkedList{element_zero : None, total_size : 0}
+        LoopedLinkedList{first_element : None, last_element : None, total_size : 0}
     }
 
     fn get_element_at_index(&self, position : usize) -> Option<T> {
@@ -42,74 +50,98 @@ impl<T> LoopedLinkedList<T> where T: Copy + Debug {
 
         let list_index = position % self.total_size;
 
-        let mut current = &self.element_zero;
+        let mut current = self.first_element.clone();
         for _ in 0..list_index {
-            if let Some(node) = current {
-                current = &node.next_element;
-            }
+            current = current.unwrap().borrow().next_element.clone();
         }
 
         if let Some(node) = current {
-            Some(node.value)
+            Some(node.borrow().value)
         } else {
             None
         }
     }
 
-    fn add_in_position(&self, object : T, position : i32) {
-        // Finding the position based on what is closest to the starting point.
-        let loop_size_int = self.total_size as i32;
-        let actual_position = (position + loop_size_int/2) % loop_size_int - loop_size_int/2;
+    fn add_in_position(&mut self, object: T, position: i32) {
 
-        let new_node = Box::new(LoopedLinkedListNode {
+
+        let new_node = Rc::new(RefCell::new(LoopedLinkedListNode {
             value: object,
-            prev_element: None,
             next_element: None,
-        });
+        }));
 
-        // If positive iterating in the front:
-        let mut current = &mut self.element_zero;
-        if actual_position >= 0 {
-            for _ in 0..actual_position - 1 {
-                if let Some(node) = current {
-                    current = &mut node.next_element;
-                }
-            }
+        // If it's the first element, handling it differently.
+        if self.total_size == 0 {
+            let mut node_ref = (*new_node.borrow_mut()).clone();
+            node_ref.next_element = None;
+            println!("NREF: {:?}", node_ref );
+            self.first_element = Some(new_node.clone());
+            self.last_element = Some(new_node.clone());
+            self.total_size = 1;
+            println!("debug: {:?}", self.first_element );
+            return;
         }
+
+        // Adding in front or back is easy. Apologies for the code duplication.
+        let position = position % self.total_size as i32;
+
+        println!("calling ADD, size is {}, position is {}", self.total_size, position);
+
+        if position == 0 || position == -1 || position == self.total_size as i32 - 1{
+            // Adding the next element as the first in the current list.
+            let mut node_ref = (*new_node.borrow_mut()).clone();
+            node_ref.next_element = self.first_element.clone();
+
+            // Updating the "next" of the last element
+            let last_element_ref = self.last_element.clone().unwrap();
+            let mut last_element_ref = (*last_element_ref.borrow_mut()).clone();
+            last_element_ref.next_element = Some(new_node.clone());
+
+            // Updating "first element", last element doesn't need it.
+            if position == 0 {
+                self.first_element = Some(new_node.clone());
+            }
+            else {
+                self.last_element = Some(new_node.clone());
+            }
+
+            println!("debug: {:?}", node_ref );
+        } 
         else {
-            for _ in 0..actual_position.abs() - 1 {
-                if let Some(node) = current {
-                    current = &mut node.prev_element;
-                }
-            }
-        }
-        if let Some(node) = current {
-                
-            // Links on the new node
-            new_node.next_element = node.next_element;
-            new_node.prev_element = Some(node);
+            // Do nothing for now TODO
 
-            // Updating links of the old nodes.
-            if let Some(next_node) = node.next_element {
-                next_node.prev_element = Some(new_node);
-            }
-            node.next_element = Some(new_node);
+            // // Iterating on the list elements:
+            // let mut current = self.first_element.clone();
+            // for _ in 0..position - 1 {
+            //     current = current.unwrap().borrow().next_element.clone();
+            // }
+
+            // // Adding the new node in position.
+            // let mut current_node = current.unwrap();
+            // new_node.get_mut().next_element = current_node.borrow().next_element.clone();
+            // current_node.get_mut().next_element = Some(new_node);
         }
+
+        self.total_size += 1;
     }
 
+
     fn print_list(&self) {
-        let mut current = &mut self.element_zero;
-        for _ in 0..self.total_size - 1 {
-            if let Some(node) = current {
-                current = &mut node.next_element;
-                if let Some(next_node) = current {
-                    println!("{:?}", next_node.value);
-                }
-            }
+        let mut current = self.first_element.clone();
+        for list_idx in 0..self.total_size - 1 {
+            println!("List element {} : {:?}", list_idx, current.as_ref().unwrap().borrow());
+            current = current.unwrap().borrow().next_element.clone();
         }
     }
 
 }
+
+
+
+// Using an application-specific approach rather than implementing a linked list: 
+// While the list is a potentially elastic approach, moving N numbers N times has a 
+// complexity of at least N^2.
+// Instead, we only need to know what's happening on points 1000, 2000 and 3000! 
 
 // Primary Function
 fn execute (input_path : String)  -> Option<(u32, u32)> {
@@ -134,12 +166,13 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     assert!(lines_vec.len() > 1);
 
     // Converting to number. The step above is unnecessary, but this uniforms the various exercises.
-    let mut numbers_vec : Vec<MovableNumber> = lines_vec.iter()
-        .map(|elem| MovableNumber{value: elem.parse().unwrap(), has_moved: false}).collect();
+    let numbers_vec : Vec<MovableNumber> = lines_vec.iter()
+        .map(|elem| {let value : i32 = elem.parse().unwrap(); MovableNumber{value: value, has_moved: false}}).collect();
     let mut loopedList = LoopedLinkedList::<MovableNumber>::new();
     for element in numbers_vec {
-
+        loopedList.add_in_position(element, -1);
     }
+    loopedList.print_list();
 
 
     result_part_1 = 0;
@@ -151,7 +184,7 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
 fn main() -> io::Result<()> {
     println!("Welcome to Advent of Code 2022 - Day 20!");
 
-    let results = execute("./data/input.txt".to_string()).unwrap();
+    let results = execute("./data/test.txt".to_string()).unwrap();
     
     println!("Part 1 result is {}.", results.0);
     println!("Part 2 result is {}.", results.1);
