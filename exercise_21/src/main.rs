@@ -8,15 +8,36 @@ use std::collections::HashMap;
 use std::io::{self, prelude::*, BufReader};
 
 // utility
+
+#[derive(Debug, Clone)]
+enum OperationType {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug, Clone)]
 struct Operation {
     first : String,
     second : String,
-    operation : fn(i64, i64) -> i64,
+    operation : OperationType,
 }
 
+#[derive(Debug, Clone)]
 enum Statement {
     Value(i64),
+    Human(),
     Function(Operation),
+}
+
+fn get_operation(operation_type : &OperationType) -> fn(i64, i64) -> i64 {
+    match operation_type {
+        OperationType::Add=>|val1, val2|{val1 + val2},
+        OperationType::Sub=>|val1, val2|{val1 - val2},
+        OperationType::Mul=>|val1, val2|{val1 * val2},
+        OperationType::Div=>|val1, val2|{val1 / val2},
+    }
 }
 
 fn get_line_statement (line : String) -> (String, Statement) {
@@ -34,10 +55,10 @@ fn get_line_statement (line : String) -> (String, Statement) {
     else {
         let split_function_str = split_str[1].split(" ").collect::<Vec<&str>>();
         let operator = match split_function_str[1] {
-            "+"=>|val1, val2|{val1 + val2},
-            "-"=>|val1, val2|{val1 - val2},
-            "*"=>|val1, val2|{val1 * val2},
-            "/"=>|val1, val2|{val1 / val2},
+            "+"=>OperationType::Add,
+            "-"=>OperationType::Sub,
+            "*"=>OperationType::Mul,
+            "/"=>OperationType::Div,
             _=>panic!("Wrong operator!"),
         };
         return (name.to_string(), Statement::Function(Operation {
@@ -48,7 +69,12 @@ fn get_line_statement (line : String) -> (String, Statement) {
     }
 }
 
-fn simplify_statements_map (map : &mut HashMap<String, Statement>) {
+fn simplify_statements_map (map : &mut HashMap<String, Statement>, use_humn : bool) {
+
+    // First replacing "humn" 
+    if use_humn{
+        let _ = map.insert("humn".to_string(), Statement::Human());
+    }
 
     // For each element in the vector, if it's not a "value" searching
     // for the two members. If both members are values, replacing that with a value and returning.
@@ -60,8 +86,7 @@ fn simplify_statements_map (map : &mut HashMap<String, Statement>) {
                 if let Some(Statement::Value(val1)) = map.get(&operation.first) {
                     if let Some(Statement::Value(val2)) = map.get(&operation.second) {
                         last_statement_found = Some(name.clone());
-                        statement_new_value = (operation.operation)(*val1, *val2);
-                        println!("Found statement {}", name);
+                        statement_new_value = (get_operation(&operation.operation))(*val1, *val2);
                         break;
                     }
                 }
@@ -70,16 +95,122 @@ fn simplify_statements_map (map : &mut HashMap<String, Statement>) {
 
         // If a new statement has been found, updating the map.
         if let Some (statement) = last_statement_found {
+
+
             let _ = map.insert(statement, Statement::Value(statement_new_value));
         }
         else {
-            if let Statement::Function(_) = map.get(&"root".to_string()).unwrap() {
-                panic!("Root is not solved yet!");
+            // If part 1 i am expecting this to solve it all.
+            if !use_humn {
+                if let Statement::Function(_) = map.get(&"root".to_string()).unwrap() {
+                    panic!("Root is not solved yet!");
+                }
             }
 
             println!("No more elements to simplify, root has been solved");
             return;
         }
+    }
+}
+
+
+// TODO used only once for root - TODO RENAME
+fn get_operation_and_value (map : &HashMap<String, Statement>, input_key : String) -> Option<(&String, &Operation, &i64)> {
+    let mut key = None;
+    let mut operation: Option<&Operation> = None;
+    let mut value = None;
+    if let Statement::Function(root_operation) = map.get(&input_key).unwrap() {
+        if let Statement::Function(operation_temp) = map.get(&root_operation.first).unwrap() {
+            if let Statement::Value(value_temp) = map.get(&root_operation.second).unwrap() {
+                key = Some(&root_operation.first);
+                operation = Some(operation_temp);
+                value = Some(value_temp);
+            }
+        } 
+        else if let Statement::Value(value_temp) = map.get(&root_operation.first).unwrap() {
+            if let Statement::Function(operation_temp) = map.get(&root_operation.second).unwrap() {
+                key = Some(&root_operation.second);
+                operation = Some(operation_temp);
+                value = Some(value_temp);
+            }
+        } 
+        else {
+            panic!("root is not right! {:?}", root_operation);
+        }
+    }
+
+    Some ((key.unwrap(), operation.unwrap(), value.unwrap()))
+}
+
+
+fn solve_with_humn (map : &HashMap<String, Statement>) -> i64 /* Value of humn */ {
+    // Starting from root, but the operation is ignored, simply taking the statement
+    // that is not a value and expecting it to be a value
+    let root_stats = get_operation_and_value(map, "root".to_string()).unwrap();
+
+    println!("Starting with root with value {} and operation {:?}", root_stats.2, root_stats.1);
+
+    solve_operation_iteratively(&map, root_stats.1, root_stats.2)
+}
+
+
+fn solve_operation_iteratively (map : &HashMap<String, Statement>, operation : &Operation, input_value : &i64) -> i64 {
+
+    // Given the operation i'm looking for both sides. Being a bit verbose but it should work.
+    let partial_value: &i64;
+    let is_first_element_value;
+    let mut next_operation = None;
+    let mut is_last_iteration = false;
+    if let Statement::Value(temp_value) = map.get(&operation.first).unwrap() {
+        partial_value = temp_value;
+        is_first_element_value = true;
+        if let Statement::Human() = map.get(&operation.second).unwrap() {
+            is_last_iteration = true;
+        }
+        else if let Statement::Function(operation) = map.get(&operation.second).unwrap() {
+            next_operation = Some(operation);
+        }
+        else {
+            panic!("unexpected operation type");
+        }
+    }
+    else if let Statement::Value(temp_value) = map.get(&operation.second).unwrap() {
+        partial_value = temp_value;
+        is_first_element_value = false;
+        if let Statement::Human() = map.get(&operation.first).unwrap() {
+            is_last_iteration = true;
+        }
+        else if let Statement::Function(operation) = map.get(&operation.first).unwrap() {
+            next_operation = Some(operation);
+        }
+        else {
+            panic!("unexpected operation type");
+        }
+    }    
+    else {
+        panic!("No element is a value in the operation!");
+    }
+
+    // Inverse of the original operation: 
+    let resulting_value= match operation.operation {
+        OperationType::Add=>input_value - partial_value,
+        OperationType::Sub=>{
+            if is_first_element_value {
+                partial_value - input_value
+            }
+            else {
+                input_value + partial_value
+            }
+        }
+        OperationType::Mul=>input_value / partial_value,
+        OperationType::Div=>input_value * partial_value,
+    };
+
+    if is_last_iteration {
+        return resulting_value;
+    }
+    else {
+        return solve_operation_iteratively(&map, next_operation.unwrap(), &resulting_value);
     }
 }
 
@@ -113,16 +244,22 @@ fn execute (input_path : String)  -> Option<(i64, i64)> {
         let statement = get_line_statement(line);
         statements_map.insert(statement.0, statement.1);
     }
-
-    simplify_statements_map(&mut statements_map);
-    if let Statement::Value(root_value ) = statements_map.get(&"root".to_string()).unwrap() {
+    let mut statements_map_part_1 = statements_map.clone();
+    simplify_statements_map(&mut statements_map_part_1, false);
+    if let Statement::Value(root_value ) = statements_map_part_1.get(&"root".to_string()).unwrap() {
         result_part_1 = root_value.clone();
+        println!("part 1 completed.")
     }
     else {
         panic!("Part 1 failed!");
     }
 
-    result_part_2 = 0;
+    // For part 2 first solving everything that is not "contamined" by the human
+    println!("Starting part 2...");
+    let mut statements_map_part_2= statements_map.clone();
+    simplify_statements_map(&mut statements_map_part_2, true /* Using humn */);
+    result_part_2 = solve_with_humn(&statements_map_part_2);
+    println!("Part 2 completed.");
     Some((result_part_1, result_part_2))
 }
 
