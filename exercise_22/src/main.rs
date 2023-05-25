@@ -1,4 +1,4 @@
-// Exercise 22: Finding your way across a weird space-warping map!
+// Exercise 22: Finding your way across a weird space-wrapped map!
 
 // For reading/parsing
 use std::fs::File;
@@ -36,7 +36,7 @@ enum MovementCommand {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-enum WarpedBlock {
+enum WrappedBlock {
     Floor,
     Wall, 
     Skip
@@ -50,26 +50,26 @@ struct WorldCursor{
 
 
 
-struct WarpedMap {
-    world_map : Vec<Vec<WarpedBlock>>,
+struct WrappedMap {
+    world_map : Vec<Vec<WrappedBlock>>,
     movement_commands : Vec<MovementCommand>,
     cursor : Option<WorldCursor>
 }
 
-impl WarpedMap {
-    fn new() -> WarpedMap {
-        WarpedMap {
+impl WrappedMap {
+    fn new() -> WrappedMap {
+        WrappedMap {
             world_map : Vec::new(),
             movement_commands : Vec::new(),
             cursor : None,
         }
     }
 
-    fn _get_warped_block_char(block_type : &WarpedBlock) -> char {
+    fn _get_wrapped_block_char(block_type : &WrappedBlock) -> char {
         match block_type {
-            WarpedBlock::Floor=>'.',
-            WarpedBlock::Wall =>'#',
-            WarpedBlock::Skip =>' ',
+            WrappedBlock::Floor=>'.',
+            WrappedBlock::Wall =>'#',
+            WrappedBlock::Skip =>' ',
         }
     }
 
@@ -77,16 +77,16 @@ impl WarpedMap {
     fn add_line(&mut self, input_line : &String) {
         self.world_map.push(input_line.chars().map(|character| {
             match character {
-                '.'=>WarpedBlock::Floor,
-                '#'=>WarpedBlock::Wall,
-                ' '=>WarpedBlock::Skip,
+                '.'=>WrappedBlock::Floor,
+                '#'=>WrappedBlock::Wall,
+                ' '=>WrappedBlock::Skip,
                 _ => panic!("Unexpected char!"),
             }
         }).collect());
 
         // If it's the first line, positioning the cursor.0
         if self.world_map.len() == 1 {
-            let start_position = self.world_map[0].iter().position(|elem| elem == &WarpedBlock::Floor).unwrap();
+            let start_position = self.world_map[0].iter().position(|elem| elem == &WrappedBlock::Floor).unwrap();
             self.cursor = Some(WorldCursor { 
                 position: (start_position, 0),
                 direction: CursorDirection::Right});
@@ -104,7 +104,7 @@ impl WarpedMap {
 
         for mut line in &mut self.world_map {
             if line.len() < max_length {
-                line.extend(vec![WarpedBlock::Skip; max_length - line.len()]);
+                line.extend(vec![WrappedBlock::Skip; max_length - line.len()]);
             }
         } 
     }
@@ -127,7 +127,7 @@ impl WarpedMap {
         }).collect();
     }
 
-    fn get_block_at_position(&self, pos: &(usize, usize)) -> Option<WarpedBlock> {
+    fn get_block_at_position(&self, pos: &(usize, usize)) -> Option<WrappedBlock> {
         if self.world_map.is_empty(){
             return None;
         }
@@ -157,7 +157,7 @@ impl WarpedMap {
 
             let found_block = 
                 self.get_block_at_position(&(new_position.0 as usize, new_position.1 as usize)).unwrap();
-            if found_block != WarpedBlock::Skip{
+            if found_block != WrappedBlock::Skip{
                 return (new_position.0 as usize, new_position.1 as usize);
             }
 
@@ -173,11 +173,11 @@ impl WarpedMap {
             // Checking the next block in position
             let next_position = self.get_next_cursor_position(&temp_cursor);
             temp_cursor.position = match self.get_block_at_position(&next_position) {
-                Some(WarpedBlock::Floor)=>{
+                Some(WrappedBlock::Floor)=>{
                     next_position
                 },
-                Some(WarpedBlock::Wall)=>temp_cursor.position,//do nothing
-                Some(WarpedBlock::Skip)=>panic!("Encountered a 'skip' block while moving!"),
+                Some(WrappedBlock::Wall)=>temp_cursor.position,//do nothing
+                Some(WrappedBlock::Skip)=>panic!("Encountered a 'skip' block while moving!"),
                 None=> panic!("found no block!"),
             }
         }
@@ -207,7 +207,7 @@ impl WarpedMap {
     fn _display_map(&self) {
         for line in self.world_map.iter() {
             for block in line {
-                print!("{}", WarpedMap::_get_warped_block_char(block));
+                print!("{}", WrappedMap::_get_wrapped_block_char(block));
             }
             println!("");
         }
@@ -238,9 +238,9 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     println!("read {} lines from input", lines_vec.len());
     assert!(lines_vec.len() > 1);
 
-    // Creating the warped map: 
+    // Creating the wrapped map: 
     println!("Starting Part 1...");
-    let mut world_map = WarpedMap::new();
+    let mut world_map = WrappedMap::new();
     for line in lines_vec {
         if  line.len() > 0 {
             if !line.starts_with(' ') && !line.starts_with('.') && !line.starts_with('#')  {
@@ -263,6 +263,9 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     let final_cursor = world_map.cursor.as_ref().unwrap().clone();
     result_part_1 = ((final_cursor.position.1 + 1) * 1000 +
          (final_cursor.position.0 + 1) * 4) as u32 + final_cursor.direction as u32;
+    
+
+    // For part 2 the only difference is how to apply the wrapping. 
     
 
     result_part_2 = 0;
