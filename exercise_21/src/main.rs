@@ -265,7 +265,7 @@ fn execute (input_path : String)  -> Option<(i64, i64)> {
 
 // Main 
 fn main() -> io::Result<()> {
-    println!("Welcome to Advent of Code 2022 - Day XXX!");
+    println!("Welcome to Advent of Code 2022 - Day 21!");
 
     let results = execute("./data/input.txt".to_string()).unwrap();
     
