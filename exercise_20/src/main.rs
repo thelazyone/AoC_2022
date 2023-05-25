@@ -57,7 +57,6 @@ impl<T> LoopedLinkedList<T> where T: Copy + Debug {
         }
 
         if let Some(node) = current {
-            let out_element = node.borrow().value;
             Some(node.borrow().value)
         } else {
             None
