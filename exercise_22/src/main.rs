@@ -48,6 +48,11 @@ struct WorldCursor{
     direction : CursorDirection
 }
 
+#[derive(PartialEq, Eq, Clone)]
+enum WrapMode {
+    Flat, // The wrapping applies on the same line OR column 
+    Cube, // the wrapping implies that the map is composed of six areas.
+}
 
 
 struct WrappedMap {
@@ -73,6 +78,14 @@ impl WrappedMap {
         }
     }
 
+    // Setting the cursor according to the rules of the exercise.
+    fn reset_cursor(&mut self){
+        let start_position = self.world_map[0].iter().position(|elem| elem == &WrappedBlock::Floor).unwrap();
+        self.cursor = Some(WorldCursor { 
+            position: (start_position, 0),
+            direction: CursorDirection::Right});
+    }
+
     // Parsing one line of the map.
     fn add_line(&mut self, input_line : &String) {
         self.world_map.push(input_line.chars().map(|character| {
@@ -86,10 +99,7 @@ impl WrappedMap {
 
         // If it's the first line, positioning the cursor.0
         if self.world_map.len() == 1 {
-            let start_position = self.world_map[0].iter().position(|elem| elem == &WrappedBlock::Floor).unwrap();
-            self.cursor = Some(WorldCursor { 
-                position: (start_position, 0),
-                direction: CursorDirection::Right});
+            self.reset_cursor();
         }
 
         // This is costly but it's the more general way to ensure that the matrix is well defined.
@@ -140,38 +150,50 @@ impl WrappedMap {
             [(self.world_map[0].len() + pos.0) % self.world_map[0].len()].clone())
     }
 
-    fn get_next_cursor_position(&self, cursor: &WorldCursor) -> (usize, usize) {
+    fn get_next_cursor_position(&self, cursor: &WorldCursor, wrap_mode: &WrapMode) -> (usize, usize) {
         let mut current_position = (cursor.position.0 as i32, cursor.position.1 as i32);
-        loop {
-            let mut new_position = match cursor.direction {
-                CursorDirection::Down=>(current_position.0, current_position.1 + 1),
-                CursorDirection::Up=>(current_position.0, current_position.1 - 1),
-                CursorDirection::Right=>(current_position.0 + 1, current_position.1),
-                CursorDirection::Left=>(current_position.0 - 1, current_position.1),
-            };  
 
-            // applying the module to both col and row
-            new_position = (
-                (self.world_map[0].len() as i32 + new_position.0) % self.world_map[0].len() as i32,
-                (self.world_map.len() as i32 + new_position.1) % self.world_map.len() as i32,);
-
-            let found_block = 
-                self.get_block_at_position(&(new_position.0 as usize, new_position.1 as usize)).unwrap();
-            if found_block != WrappedBlock::Skip{
-                return (new_position.0 as usize, new_position.1 as usize);
+        if wrap_mode == &WrapMode::Flat{
+            loop {
+                let mut new_position = match cursor.direction {
+                    CursorDirection::Down=>(current_position.0, current_position.1 + 1),
+                    CursorDirection::Up=>(current_position.0, current_position.1 - 1),
+                    CursorDirection::Right=>(current_position.0 + 1, current_position.1),
+                    CursorDirection::Left=>(current_position.0 - 1, current_position.1),
+                };  
+    
+                // applying the module to both col and row
+                new_position = (
+                    (self.world_map[0].len() as i32 + new_position.0) % self.world_map[0].len() as i32,
+                    (self.world_map.len() as i32 + new_position.1) % self.world_map.len() as i32,);
+    
+                let found_block = 
+                    self.get_block_at_position(&(new_position.0 as usize, new_position.1 as usize)).unwrap();
+                if found_block != WrappedBlock::Skip{
+                    return (new_position.0 as usize, new_position.1 as usize);
+                }
+    
+                // If it's a "skip", moving forward until found a proper block.
+                current_position = new_position;
             }
+        }
 
-            // If it's a "skip", moving forward until found a proper block.
-            current_position = new_position;
+        else {
+
+            // TODO! Gotta find a smart solution to wrap the cube without having to actually deal with the specific case of my map.
+
+            return (0,0);
         }
     }
 
     // Handling the cursor movements
-    fn move_cursor(&mut self, steps: usize) {
+    fn move_cursor(&mut self, steps: usize, wrap_mode: &WrapMode) {
         let mut temp_cursor = self.cursor.as_ref().unwrap().clone();
         for _ in 0..steps {
             // Checking the next block in position
-            let next_position = self.get_next_cursor_position(&temp_cursor);
+            let next_position = self.get_next_cursor_position(&temp_cursor, wrap_mode);
+
+            // Depending on what is found, behaving differently.
             temp_cursor.position = match self.get_block_at_position(&next_position) {
                 Some(WrappedBlock::Floor)=>{
                     next_position
@@ -194,10 +216,10 @@ impl WrappedMap {
         }
     }
 
-    fn apply_all_movements(&mut self) {
+    fn apply_all_movements(&mut self, wrap_mode: WrapMode) {
         for command in self.movement_commands.clone() {
             match command {
-                MovementCommand::Advance(value)=>self.move_cursor(value.clone()),
+                MovementCommand::Advance(value)=>self.move_cursor(value.clone(), &wrap_mode),
                 MovementCommand::Rotate(value)=>self.rotate_cursor(value.clone()),
             }
         }
@@ -259,16 +281,19 @@ fn execute (input_path : String)  -> Option<(u32, u32)> {
     //world_map._display_map();
 
     println!("Applying movements...");
-    world_map.apply_all_movements();
+    world_map.apply_all_movements(WrapMode::Flat);
     let final_cursor = world_map.cursor.as_ref().unwrap().clone();
     result_part_1 = ((final_cursor.position.1 + 1) * 1000 +
          (final_cursor.position.0 + 1) * 4) as u32 + final_cursor.direction as u32;
     
 
     // For part 2 the only difference is how to apply the wrapping. 
-    
+    world_map.reset_cursor();
+    world_map.apply_all_movements(WrapMode::Cube);
+    let final_cursor = world_map.cursor.as_ref().unwrap().clone();
+    result_part_2 = ((final_cursor.position.1 + 1) * 1000 +
+         (final_cursor.position.0 + 1) * 4) as u32 + final_cursor.direction as u32;
 
-    result_part_2 = 0;
     Some((result_part_1, result_part_2))
 }
 
