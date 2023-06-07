@@ -60,88 +60,63 @@ enum WrapMode {
 
 type SeamMap = HashMap<(usize, usize, CursorDirection), ((usize, usize), Option<RotationDirection>)>;
 
-// Creating two iterators from the two found points.
-struct EdgeElement<'a> {
-    current_pos : (usize, usize),
-    prev_pos : (usize, usize),
-    start_pos : (usize, usize),
-    direction : CursorDirection,
-    wrapped_map : &'a WrappedMap<'a>,
+enum CornerType {
+    Concave, 
+    Flat,
+    Convex,
 }
 
-impl<'a> Iterator for EdgeElement<'a> {
-    type Item = EdgeElement<'a>;
-    fn next(&mut self) -> Option<EdgeElement<'a>> {
+struct CornerElement {
+    position: (usize, usize),
+    turns: CornerType,
+}
 
-        // Finding all the nearby elements, checking which ones could be edges
-        let neighbours = self.wrapped_map.get_neighbours(self.current_pos);
+struct CornersMap {
+    corners : Vec<CornerElement>
+}
 
-        let mut next_element_position = None;
-        for neighbour_position in neighbours {
-            let skip_elements = self.wrapped_map.get_number_of_neighbours_of_type(
-                neighbour_position, WrappedBlock::Skip, true);
-            if neighbour_position != self.current_pos &&
-                neighbour_position != self.prev_pos &&
-                neighbour_position != self.start_pos &&
-                self.wrapped_map.get_block_at_position(&neighbour_position).unwrap() != WrappedBlock::Skip &&
-                skip_elements > 0 {
-                
-                // The next block has been identified: however, before considering wether or not it is the next element
-                // there are two special cases: 
-                // 
-                // 1 : Concave seam
-                // 
-                // #####
-                // ####X####
-                // #########
-                // In this case, the element is skipped and we search directly the next one. 
-                //
-                // 2 : Convex Seam
-                //      a
-                // #####Xb
-                // ######
-                // In this case the element is added twice, first facing A then facing B.
-                if skip_elements == 1 /* Case 1 */ {
-                    //
-                }
-                else if skip_elements == 5 /* Case 2 */ {
-                    //
-                }
-                else {
-                    if next_element_position.is_none() {
-                        next_element_position = Some(neighbour_position);
-                    }
-                    else {
-                        panic!("more than one element found as possible new element!");
-                    }
-                }
-            }
+impl CornersMap {
+
+    fn find_step_size(map_cols_number : usize, map_rows_number : usize) -> usize {
+
+        // TODO implement properly
+
+        if map_cols_number % 50 == 0 {
+            return 50;
+        }
+        else {
+            return 4;
         }
 
-        if let Some(position) = next_element_position {
-
-            // TODO fix direction!
-            let next_element = EdgeElement {
-                current_pos : position,
-                prev_pos : self.current_pos,
-                start_pos : self.start_pos,
-                direction : self.wrapped_map.get_direction_between_points(self.current_pos, position).unwrap(),
-                wrapped_map : self.wrapped_map,
-            };
-
-            self.prev_pos = self.current_pos;
-            self.current_pos = next_element.current_pos.clone();
-            self.direction = next_element.direction.clone();
-
-            return Some(next_element);
-        }
-
-        None
+        0 
     }
 
+    fn load_from_wrapped_map(&mut self, input_map : &WrappedMap) {
+        
+        // First finding the side of the cube: going with a fairly rough
+        // approach I can simply divide the sizes by a certain number (2, 3, 4, or 5) and see
+        // if it divides it well.
+        let (map_cols_number, map_rows_number) = input_map.get_map_size();
+        let step_size = CornersMap::find_step_size(map_cols_number, map_rows_number);
+        let cols_number = map_cols_number / step_size;
+        let rows_number = map_rows_number / step_size;
+
+        for row_idx in 0..rows_number {
+            for col_idx in 0..cols_number {
+                
+                // Understanding the angle of this corner: 
+                let turns = match input_map.border_count((col_idx * step_size, row_idx * step_size)) {
+                    1 => CornerType::Concave,
+                    3 => CornerType::Flat,
+                    5 => CornerType::Convex,
+                    _ => panic!("weird number of borders!"),
+                };
+
+                self.corners.push(CornerElement{position: (col_idx * step_size, row_idx * step_size), turns});
+            }
+        }
+    }
 }
-
-
 
 
 struct WrappedMap<'a> {
@@ -351,6 +326,7 @@ impl<'a> WrappedMap<'a> {
         counter
     }
 
+    // TODO TBR DEPRECATED
     fn get_concave_seam_start(&self) -> Option<(usize, usize)> {
 
         let (col_number, row_number) = self.get_map_size();
@@ -403,40 +379,19 @@ impl<'a> WrappedMap<'a> {
         // 2 - which rotation (if any) will be applied.
         let mut seam_map = HashMap::<(usize, usize, CursorDirection), ((usize, usize), Option<RotationDirection>)>::new();
 
-        // Starting by finding one walkable point on the map that has a CONCAVE corner.
-        // Something like X: 
-        //
-        // #...#.#..
-        // .....#..X
-        // ..#....#.#....
-        // 
-        // And then moving with two generic cursors in the two directions: 
-        // By associating one with the other, and checking the different direction
-        // of the "end" of the map, we can create the seams map.
-        let seam_start_position = self.get_concave_seam_start().unwrap();
-        println!("seam is at {:?}", seam_start_position);
+        // Checking the edges: 
+        let mut corners_map = CornersMap{corners : Vec::<CornerElement>::new()};
+        corners_map.load_from_wrapped_map(self);
+        println!("there are {} corners found.", corners_map.corners.len());
 
-        // Finding the neighbours. two of them should always be on the edge of the shape. 
-        // This assumes 90 degrees angles, if there are "peninsulas" this approach does not work.
-        let start_neighbours = self.get_neighbours(seam_start_position);
-        let mut start_iterators = Vec::<EdgeElement>::new();
-        for element_position in start_neighbours {
-            if self.get_block_at_position(&element_position).unwrap() != WrappedBlock::Skip &&
-                self.get_number_of_neighbours_of_type(element_position, WrappedBlock::Skip, false) > 0 {
-
-                start_iterators.push(EdgeElement{
-                    current_pos : element_position.clone(),
-                    prev_pos : seam_start_position.clone(), 
-                    start_pos : seam_start_position.clone(),
-                    direction : self.get_direction_between_points(seam_start_position.clone(), element_position.clone()).unwrap(),
-                    wrapped_map: self}
-                );
-            }
-        }
+        // the seam generation is done through two steps:
+        // First, each concave angle creates two segments of border that must be seamed.
+        // Then, the remaining angles are joined: 
+        // 1 - Two convex become a flat. 
+        // 2 - Convex and flat become concave.
+        // Note that flats on both sides of a concave or two concaves nearby are not possible.
         
-        if start_iterators.len() != 2 {
-            panic!("Expecting two start iterators, found {}", start_iterators.len());
-        }
+        
         // Cycling on both iterators. I'm expecting the same amount of elements.
         while let (Some(item1), Some(item2)) = (start_iterators[0].next(), start_iterators[1].next()) {
             seam_map.insert(
